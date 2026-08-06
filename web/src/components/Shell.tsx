@@ -3,6 +3,7 @@ import { NavLink, useLocation, useNavigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   AlertTriangle,
+  BarChart3,
   CheckCircle2,
   Command,
   Download,
@@ -26,6 +27,7 @@ import { CommandPalette } from '@/components/CommandPalette';
 const NAV = [
   { to: '/', label: 'Overview', icon: Gauge, end: true },
   { to: '/channels', label: 'Channels', icon: LayoutGrid, end: false },
+  { to: '/analytics', label: 'Analytics', icon: BarChart3, end: false },
   { to: '/settings', label: 'Settings', icon: SettingsIcon, end: false },
 ];
 

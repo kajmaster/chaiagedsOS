@@ -8,6 +8,7 @@ import { fileURLToPath } from 'node:url';
 import { initDb, driver } from './db.js';
 import authRoutes, { purgeStaleDemos } from './routes/auth.js';
 import accountRoutes from './routes/accounts.js';
+import analyticsRoutes from './routes/analytics.js';
 import { NICHES, AUDIENCE_TIERS } from './lib/rpm.js';
 import { isConfigured } from './lib/youtube.js';
 import { requireAuth } from './lib/auth.js';
@@ -80,6 +81,7 @@ app.get('/api/meta', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
+app.use('/api/analytics', analyticsRoutes);
 
 /* CSV export — accountants ask for this on day one. */
 app.get('/api/export.csv', requireAuth, async (req, res, next) => {

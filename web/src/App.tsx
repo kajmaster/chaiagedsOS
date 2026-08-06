@@ -6,6 +6,7 @@ import { Login } from '@/pages/Login';
 import { Dashboard } from '@/pages/Dashboard';
 import { Channels } from '@/pages/Channels';
 import { ChannelDetail } from '@/pages/ChannelDetail';
+import { Analytics } from '@/pages/Analytics';
 import { Settings } from '@/pages/Settings';
 
 function Booting() {
@@ -33,6 +34,7 @@ function Routed() {
         <Route path="/" element={<Dashboard />} />
         <Route path="/channels" element={<Channels />} />
         <Route path="/channels/:id" element={<ChannelDetail />} />
+        <Route path="/analytics" element={<Analytics />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>

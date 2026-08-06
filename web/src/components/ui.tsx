@@ -280,29 +280,58 @@ export function Meter({ value, tone = 'amber', className }: { value: number; ton
 
 /* -------------------------------------------------------------- countUp */
 
-/** Animated figure — the small touch that makes a dashboard feel alive. */
+/**
+ * Animated figure — the small touch that makes a dashboard feel alive.
+ *
+ * The animation is strictly decorative and must never be able to hold the
+ * display on a stale number. Browsers do not fire requestAnimationFrame in a
+ * hidden tab, so an earlier version froze mid-tween whenever the data changed
+ * while the tab was backgrounded, and went on showing an out-of-date figure
+ * with nothing to indicate it. Every path below therefore ends on the exact
+ * value, animated or not.
+ */
+const COUNT_UP_MS = 700;
+
 export function CountUp({ value, format, className }: { value: number; format: (n: number) => string; className?: string }) {
   const [display, setDisplay] = useState(value);
-  const from = useRef(value);
+  const shown = useRef(value); // what is actually on screen right now
   const raf = useRef<number>();
+  const safety = useRef<ReturnType<typeof setTimeout>>();
 
   useEffect(() => {
-    const start = performance.now();
-    const origin = from.current;
-    const delta = value - origin;
-    if (delta === 0) return;
+    const settle = () => {
+      shown.current = value;
+      setDisplay(value);
+    };
 
+    // No animation possible or wanted — show the truth immediately.
+    const reduceMotion = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+    if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return settle();
+    if (reduceMotion) return settle();
+
+    const origin = shown.current;
+    const delta = value - origin;
+    if (Math.abs(delta) < 0.005) return settle();
+
+    const start = performance.now();
     const tick = (now: number) => {
-      const t = Math.min(1, (now - start) / 700);
+      const t = Math.min(1, (now - start) / COUNT_UP_MS);
       const eased = 1 - Math.pow(1 - t, 3);
-      setDisplay(origin + delta * eased);
+      const next = origin + delta * eased;
+      shown.current = next;
+      setDisplay(next);
       if (t < 1) raf.current = requestAnimationFrame(tick);
-      else from.current = value;
+      else settle();
     };
     raf.current = requestAnimationFrame(tick);
+
+    // Timers still fire in a background tab even though rAF does not, so this
+    // guarantees we land on the real number however the tween is interrupted.
+    safety.current = setTimeout(settle, COUNT_UP_MS + 250);
+
     return () => {
       if (raf.current) cancelAnimationFrame(raf.current);
-      from.current = value;
+      if (safety.current) clearTimeout(safety.current);
     };
   }, [value]);
 

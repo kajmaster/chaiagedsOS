@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
-import { CornerDownLeft, Download, Gauge, LayoutGrid, Plus, Search, Settings, Youtube } from 'lucide-react';
+import { BarChart3, CornerDownLeft, Download, Gauge, LayoutGrid, Plus, Search, Settings, Youtube } from 'lucide-react';
 import { useApp } from '@/store/AppStore';
 import { api } from '@/lib/api';
 import { avatarGradient, cx, initials, money } from '@/lib/format';
@@ -37,6 +37,7 @@ export function CommandPalette({
       { id: 'export', label: 'Export portfolio to CSV', group: 'Actions', icon: <Download className="h-4 w-4" />, run: () => { onClose(); api.downloadCsv().catch(() => toast({ title: 'Export failed', tone: 'error' })); } },
       { id: 'nav-home', label: 'Go to Overview', group: 'Navigate', icon: <Gauge className="h-4 w-4" />, run: () => { onClose(); onNavigate('/'); } },
       { id: 'nav-ch', label: 'Go to Channels', group: 'Navigate', icon: <LayoutGrid className="h-4 w-4" />, run: () => { onClose(); onNavigate('/channels'); } },
+      { id: 'nav-an', label: 'Go to Analytics', hint: 'Blended RPM, niche performance', group: 'Navigate', icon: <BarChart3 className="h-4 w-4" />, run: () => { onClose(); onNavigate('/analytics'); } },
       { id: 'nav-set', label: 'Go to Settings', group: 'Navigate', icon: <Settings className="h-4 w-4" />, run: () => { onClose(); onNavigate('/settings'); } },
     ];
 

@@ -1,6 +1,7 @@
 import type {
   Account,
   AccountDetail,
+  AnalyticsResponse,
   AudienceTier,
   ChannelLookup,
   Credentials,
@@ -87,6 +88,7 @@ export const api = {
   updateMe: (payload: { name?: string; currency?: string }) => patch<{ user: User }>('/auth/me', payload),
 
   portfolio: () => request<PortfolioResponse>('/accounts'),
+  analytics: (range: string) => request<AnalyticsResponse>(`/analytics?range=${encodeURIComponent(range)}`),
   account: (id: string) => request<{ account: AccountDetail }>(`/accounts/${id}`),
   revealCredentials: (id: string) => post<{ credentials: Credentials }>(`/accounts/${id}/credentials`),
 

@@ -271,9 +271,26 @@ export function buildTimeline(rows, months = 12, now = Date.now()) {
       });
     }
 
-    // Spread monthly overhead evenly across the window.
+    const ownedFrom = row.acquired_at ? new Date(row.acquired_at) : new Date(row.created_at);
+    const fromKey = Number.isNaN(ownedFrom.getTime()) ? null : keyOf(ownedFrom);
+
+    // The purchase price is real money that left the account in one specific
+    // month. Leaving it out made this chart disagree with the dashboard's ROI.
+    const acquisition = Number(row.acquisition_cost || 0);
+    if (acquisition > 0 && fromKey) {
+      const bucket = index.get(fromKey);
+      if (bucket) bucket.cost += acquisition;
+    }
+
+    // Monthly overhead applies only to months the channel was actually owned.
+    // Charging it across the whole window billed rent for months before the
+    // purchase, which made longer ranges report a loss on unchanged revenue.
     const monthly = Number(row.monthly_cost || 0);
-    if (monthly > 0) for (const b of buckets) b.cost += monthly;
+    if (monthly > 0) {
+      for (const b of buckets) {
+        if (!fromKey || b.key >= fromKey) b.cost += monthly;
+      }
+    }
   }
 
   for (const b of buckets) {

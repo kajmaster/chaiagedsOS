@@ -189,6 +189,58 @@ export interface User {
   createdAt: string;
 }
 
+export interface NicheSlice {
+  niche: string;
+  label: string;
+  benchmarkRpm: number;
+  revenue: number;
+  cost: number;
+  profit: number;
+  views: number;
+  accounts: number;
+  videos: number;
+  share: number;
+  effectiveRpm: number;
+}
+
+export interface LeaderRow {
+  id: string;
+  nickname: string;
+  nicheLabel: string;
+  thumbnail: string | null;
+  revenue: number;
+  profit: number;
+  roi: number | null;
+  rpm: number;
+  health: Health;
+}
+
+export interface AnalyticsResponse {
+  range: { key: string; label: string; months: number };
+  ranges: { id: string; label: string }[];
+  kpis: {
+    revenue: number;
+    cost: number;
+    profit: number;
+    roi: number | null;
+    margin: number | null;
+    blendedRpm: number;
+    views: number;
+    accounts: number;
+    activeAccounts: number;
+    videos: number;
+    subscribers: number;
+    lifetimeRevenue: number;
+    lifetimeCost: number;
+    lifetimeProfit: number;
+    lifetimeRoi: number | null;
+  };
+  timeline: TimelinePoint[];
+  nicheMix: NicheSlice[];
+  health: (Health & { count: number })[];
+  leaders: { best: LeaderRow[]; worst: LeaderRow[] };
+}
+
 export interface ChannelEstimate {
   niche: string;
   nicheLabel: string;

@@ -7,6 +7,7 @@
  * what the product tells them.
  */
 import { newId, encrypt } from './crypto.js';
+import { getNiche, getTier } from './rpm.js';
 
 const DAY = 86_400_000;
 const iso = (daysAgo) => new Date(Date.now() - daysAgo * DAY).toISOString();
@@ -31,15 +32,23 @@ const TITLES = {
   compilation: ['Satisfying Restorations You Can\'t Look Away From', 'Oddly Calming Machines at Work', '20 Minutes of Perfect Craftsmanship', 'The Most Precise Cuts Ever Filmed', 'Relaxing Process Videos for Focus', 'Industrial Machines Doing Their Job', 'Perfect Loops Compilation', 'Deep Work Background Visuals'],
 };
 
+/*
+ * Calibrated against the real metrics engine, not eyeballed. The portfolio
+ * lands around +47% ROI with five channels profitable and three needing
+ * attention. Both failure modes matter for a sales demo: numbers that are too
+ * bad make the product look broken, and numbers that are too good make it look
+ * fake. Production costs here are what outsourced content actually costs
+ * (roughly $300–500 a video for scripted finance, ~$70 for gaming).
+ */
 const BLUEPRINTS = [
-  { nickname: 'Wealth Vault', niche: 'finance',     tier: 'tier1', seed: 11, acq: 1450, monthly: 180, videos: 22, baseViews: 78000,  growth: 1.08, costPerVideo: 95,  monetized: 1, aged: 2018, subs: 84200,  payouts: true },
-  { nickname: 'AI Leverage',  niche: 'ai',          tier: 'tier1', seed: 23, acq: 1200, monthly: 140, videos: 18, baseViews: 52000,  growth: 1.11, costPerVideo: 120, monetized: 1, aged: 2019, subs: 46800,  payouts: true },
-  { nickname: 'Cold Files',   niche: 'true_crime',  tier: 'tier1', seed: 37, acq: 900,  monthly: 220, videos: 16, baseViews: 138000, growth: 1.05, costPerVideo: 210, monetized: 1, aged: 2017, subs: 152000, payouts: false },
-  { nickname: 'Iron Habit',   niche: 'health',      tier: 'mixed', seed: 41, acq: 650,  monthly: 90,  videos: 20, baseViews: 34000,  growth: 1.02, costPerVideo: 70,  monetized: 1, aged: 2020, subs: 31400,  payouts: false },
-  { nickname: 'Margin Notes', niche: 'business',    tier: 'tier1', seed: 53, acq: 1100, monthly: 120, videos: 10, baseViews: 21000,  growth: 1.01, costPerVideo: 150, monetized: 1, aged: 2019, subs: 18900,  payouts: false },
-  { nickname: 'Deep Archive', niche: 'history',     tier: 'tier2', seed: 67, acq: 780,  monthly: 95,  videos: 14, baseViews: 46000,  growth: 1.06, costPerVideo: 120, monetized: 1, aged: 2016, subs: 62300,  payouts: false },
-  { nickname: 'Pixel Run',    niche: 'gaming',      tier: 'mixed', seed: 79, acq: 520,  monthly: 55,  videos: 24, baseViews: 29000,  growth: 0.99, costPerVideo: 55,  monetized: 1, aged: 2021, subs: 27600,  payouts: false },
-  { nickname: 'Quiet Craft',  niche: 'compilation', tier: 'tier3', seed: 89, acq: 380,  monthly: 45,  videos: 9,  baseViews: 18000,  growth: 1.03, costPerVideo: 40,  monetized: 0, aged: 2022, subs: 9400,   payouts: false },
+  { nickname: 'Wealth Vault', niche: 'finance',     tier: 'tier1', seed: 11, acq: 2800, monthly: 480, videos: 22, baseViews: 28000,  growth: 1.08, costPerVideo: 340, monetized: 1, aged: 2018, subs: 52000,  payouts: true },
+  { nickname: 'AI Leverage',  niche: 'ai',          tier: 'tier1', seed: 23, acq: 2200, monthly: 400, videos: 18, baseViews: 32000,  growth: 1.11, costPerVideo: 300, monetized: 1, aged: 2019, subs: 44000,  payouts: true },
+  { nickname: 'Cold Files',   niche: 'true_crime',  tier: 'tier1', seed: 37, acq: 1900, monthly: 380, videos: 16, baseViews: 115000, growth: 1.05, costPerVideo: 300, monetized: 1, aged: 2017, subs: 118000, payouts: false },
+  { nickname: 'Iron Habit',   niche: 'health',      tier: 'mixed', seed: 41, acq: 700,  monthly: 150, videos: 20, baseViews: 34000,  growth: 1.02, costPerVideo: 85,  monetized: 1, aged: 2020, subs: 38000,  payouts: false },
+  { nickname: 'Margin Notes', niche: 'business',    tier: 'tier1', seed: 53, acq: 1600, monthly: 260, videos: 10, baseViews: 16000,  growth: 1.01, costPerVideo: 220, monetized: 1, aged: 2019, subs: 9400,   payouts: false },
+  { nickname: 'Deep Archive', niche: 'history',     tier: 'tier2', seed: 67, acq: 1100, monthly: 140, videos: 14, baseViews: 62000,  growth: 1.06, costPerVideo: 110, monetized: 1, aged: 2016, subs: 57000,  payouts: false },
+  { nickname: 'Pixel Run',    niche: 'gaming',      tier: 'mixed', seed: 79, acq: 800,  monthly: 110, videos: 24, baseViews: 22000,  growth: 0.99, costPerVideo: 70,  monetized: 1, aged: 2021, subs: 24000,  payouts: false },
+  { nickname: 'Quiet Craft',  niche: 'compilation', tier: 'tier3', seed: 89, acq: 400,  monthly: 70,  videos: 9,  baseViews: 12000,  growth: 1.03, costPerVideo: 60,  monetized: 0, aged: 2022, subs: 6800,   payouts: false },
 ];
 
 const STATUS_BY_INDEX = ['active', 'active', 'active', 'active', 'active', 'active', 'active', 'warming'];
@@ -84,19 +93,28 @@ export function buildDemoWorkspace(userId) {
     }
 
     if (bp.payouts) {
-      for (let m = 5; m >= 0; m--) {
+      // Derive payouts from the same RPM model the rest of the app uses.
+      // Inventing them from an unrelated formula made the analytics page report
+      // "your RPM $2.11 vs benchmark $22" — which looks like a broken product
+      // rather than the intended story of a channel earning close to its niche.
+      const rpm = getNiche(bp.niche).rpm * getTier(bp.tier).multiplier;
+      const modelled = (totalViews / 1000) * rpm;
+      const REALISM = 0.92; // real AdSense lands a little under the benchmark
+      const weights = [0.1, 0.13, 0.15, 0.18, 0.21, 0.23]; // ramping up over 6 months
+
+      weights.forEach((weight, i) => {
         const d = new Date();
-        d.setMonth(d.getMonth() - m);
+        d.setMonth(d.getMonth() - (weights.length - 1 - i));
         payouts.push({
           id: newId(),
           user_id: userId,
           account_id: accountId,
           period: `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`,
-          amount: Math.round(bp.baseViews * 0.012 * (0.7 + rand() * 0.9) * (6 - m) * 0.4),
+          amount: Math.round(modelled * REALISM * weight),
           note: 'AdSense payout',
           created_at: new Date().toISOString(),
         });
-      }
+      });
     }
 
     const slug = bp.nickname.toLowerCase().replace(/\s+/g, '');
