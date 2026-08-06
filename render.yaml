@@ -6,6 +6,10 @@ databases:
   - name: chai-aged-accounts-db
     databaseName: chai_aged_accounts
     plan: free
+    # MUST match the web service's region below. Render connects services to
+    # databases over a private network, and that internal hostname only resolves
+    # within one region — a mismatch fails with `getaddrinfo ENOTFOUND dpg-…`.
+    region: frankfurt
 
 services:
   - type: web

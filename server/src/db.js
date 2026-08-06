@@ -36,16 +36,48 @@ function normalize(params) {
   });
 }
 
-export async function initDb() {
+/**
+ * Render hands services an *internal* connection string whose host has no dots
+ * (`dpg-xxxx-a`). That private network is already encrypted and does not offer
+ * TLS, so requesting SSL there fails. External hosts do need it.
+ */
+function sslFor(connectionString) {
+  try {
+    const host = new URL(connectionString).hostname;
+    if (host === 'localhost' || host === '127.0.0.1' || !host.includes('.')) return false;
+  } catch {
+    /* unparseable — fall through to the safe default */
+  }
+  return { rejectUnauthorized: false };
+}
+
+export async function initDb({ retries = 5 } = {}) {
   if (driver === 'postgres') {
     const { default: pg } = await import('pg');
-    pgPool = new pg.Pool({
-      connectionString: url,
-      ssl: url.includes('localhost') ? false : { rejectUnauthorized: false },
-      max: 8,
-    });
-    // Postgres is happy with the portable schema as-is.
-    await pgPool.query(SCHEMA);
+    pgPool = new pg.Pool({ connectionString: url, ssl: sslFor(url), max: 8 });
+
+    // A freshly provisioned database can refuse connections for a few seconds.
+    // Crashing here would fail the whole deploy, so back off and retry first.
+    for (let attempt = 1; ; attempt++) {
+      try {
+        await pgPool.query(SCHEMA);
+        break;
+      } catch (err) {
+        if (attempt > retries) {
+          if (err.code === 'ENOTFOUND') {
+            console.error(
+              `\n  FATAL: cannot resolve the database host "${err.hostname ?? ''}".\n` +
+                '  On Render this almost always means the database and the web service\n' +
+                '  are in different regions. They must match — see render.yaml.\n'
+            );
+          }
+          throw err;
+        }
+        const wait = Math.min(1000 * 2 ** (attempt - 1), 8000);
+        console.warn(`  database not ready (${err.code || err.message}); retrying in ${wait}ms…`);
+        await new Promise((r) => setTimeout(r, wait));
+      }
+    }
   } else {
     const { DatabaseSync } = await import('node:sqlite');
     const dir = path.join(__dirname, '..', '.data');
