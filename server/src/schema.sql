@@ -1,6 +1,11 @@
 -- Chai's Aged Accounts OS — portable schema (SQLite + PostgreSQL compatible).
 -- All ids are app-generated UUID strings. All timestamps are ISO-8601 TEXT.
 -- Booleans are INTEGER 0/1. Money is REAL (USD).
+--
+-- View and subscriber counts are BIGINT, never INTEGER. Postgres INTEGER stops
+-- at 2,147,483,647 and large channels pass that in lifetime views, which fails
+-- the insert outright. SQLite's INTEGER is already 64-bit, so this only ever
+-- breaks in production — see the migration in db.js.
 
 CREATE TABLE IF NOT EXISTS users (
   id            TEXT PRIMARY KEY,
@@ -31,9 +36,9 @@ CREATE TABLE IF NOT EXISTS accounts (
   acquisition_cost  REAL NOT NULL DEFAULT 0,
   monthly_cost      REAL NOT NULL DEFAULT 0,
 
-  subscribers       INTEGER NOT NULL DEFAULT 0,
-  total_views       INTEGER NOT NULL DEFAULT 0,
-  video_count       INTEGER NOT NULL DEFAULT 0,
+  subscribers       BIGINT NOT NULL DEFAULT 0,
+  total_views       BIGINT NOT NULL DEFAULT 0,
+  video_count       BIGINT NOT NULL DEFAULT 0,
 
   monetized         INTEGER NOT NULL DEFAULT 0,
   rpm_override      REAL,
@@ -60,9 +65,9 @@ CREATE TABLE IF NOT EXISTS videos (
   title          TEXT NOT NULL,
   thumbnail      TEXT,
   published_at   TEXT,
-  views          INTEGER NOT NULL DEFAULT 0,
-  likes          INTEGER NOT NULL DEFAULT 0,
-  comments       INTEGER NOT NULL DEFAULT 0,
+  views          BIGINT NOT NULL DEFAULT 0,
+  likes          BIGINT NOT NULL DEFAULT 0,
+  comments       BIGINT NOT NULL DEFAULT 0,
   cost           REAL NOT NULL DEFAULT 0,
   revenue_actual REAL,
   source         TEXT NOT NULL DEFAULT 'manual',
@@ -85,8 +90,8 @@ CREATE TABLE IF NOT EXISTS snapshots (
   user_id     TEXT NOT NULL,
   account_id  TEXT NOT NULL,
   taken_on    TEXT NOT NULL,
-  subscribers INTEGER NOT NULL DEFAULT 0,
-  total_views INTEGER NOT NULL DEFAULT 0
+  subscribers BIGINT NOT NULL DEFAULT 0,
+  total_views BIGINT NOT NULL DEFAULT 0
 );
 
 CREATE INDEX IF NOT EXISTS idx_accounts_user   ON accounts (user_id);

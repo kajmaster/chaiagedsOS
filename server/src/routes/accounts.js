@@ -22,7 +22,10 @@ const money = (v) => {
 };
 const int = (v) => {
   const n = Number(v);
-  return Number.isFinite(n) && n >= 0 ? Math.round(n) : 0;
+  if (!Number.isFinite(n) || n < 0) return 0;
+  // Belt and braces behind the BIGINT columns: never hand the database a value
+  // JavaScript itself cannot represent exactly.
+  return Math.min(Math.round(n), Number.MAX_SAFE_INTEGER);
 };
 const text = (v) => {
   const s = v == null ? '' : String(v).trim();

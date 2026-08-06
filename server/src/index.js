@@ -123,8 +123,21 @@ app.use((req, res) => res.status(404).json({ error: 'Not found.' }));
 
 // eslint-disable-next-line no-unused-vars
 app.use((err, req, res, next) => {
-  console.error('[error]', err);
-  res.status(err.status || 500).json({ error: err.expose ? err.message : 'Something went wrong on our side.' });
+  // A reference the customer can quote, so an opaque 500 is still traceable
+  // to one line in the logs instead of "it just said something went wrong".
+  const ref = Math.random().toString(36).slice(2, 8).toUpperCase();
+  console.error(`[error ${ref}] ${req.method} ${req.originalUrl}`, err);
+
+  // Postgres numeric overflow — surfaced because the generic message once hid
+  // exactly this bug for a channel with more than 2.1bn lifetime views.
+  if (err.code === '22003') {
+    return res.status(400).json({ error: 'One of those numbers is too large to store. Please report this.', ref });
+  }
+
+  res.status(err.status || 500).json({
+    error: err.expose ? err.message : `Something went wrong on our side. Reference ${ref}.`,
+    ref,
+  });
 });
 
 const started = await initDb();

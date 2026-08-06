@@ -51,9 +51,44 @@ function sslFor(connectionString) {
   return { rejectUnauthorized: false };
 }
 
+/**
+ * Columns that hold counts and must be 64-bit. `CREATE TABLE IF NOT EXISTS`
+ * never alters an existing table, so a database created before these were
+ * widened keeps 32-bit columns and rejects any channel past ~2.1bn views.
+ */
+const WIDEN_TO_BIGINT = {
+  accounts: ['subscribers', 'total_views', 'video_count'],
+  videos: ['views', 'likes', 'comments'],
+  snapshots: ['subscribers', 'total_views'],
+};
+
+async function widenCountColumns(pool) {
+  const wanted = Object.entries(WIDEN_TO_BIGINT).flatMap(([table, cols]) => cols.map((c) => ({ table, column: c })));
+
+  const { rows } = await pool.query(
+    `SELECT table_name, column_name
+       FROM information_schema.columns
+      WHERE table_schema = current_schema() AND data_type = 'integer'`
+  );
+
+  const narrow = new Set(rows.map((r) => `${r.table_name}.${r.column_name}`));
+  const todo = wanted.filter((w) => narrow.has(`${w.table}.${w.column}`));
+
+  for (const { table, column } of todo) {
+    await pool.query(`ALTER TABLE ${table} ALTER COLUMN ${column} TYPE BIGINT`);
+    console.log(`  migrated ${table}.${column} -> BIGINT`);
+  }
+  return todo.length;
+}
+
 export async function initDb({ retries = 5 } = {}) {
   if (driver === 'postgres') {
     const { default: pg } = await import('pg');
+
+    // pg returns BIGINT as a string to avoid precision loss. View counts are
+    // nowhere near 2^53, so parse them as numbers and keep the arithmetic sane.
+    pg.types.setTypeParser(20, (v) => (v === null ? null : Number(v)));
+
     pgPool = new pg.Pool({ connectionString: url, ssl: sslFor(url), max: 8 });
 
     // A freshly provisioned database can refuse connections for a few seconds.
@@ -61,6 +96,7 @@ export async function initDb({ retries = 5 } = {}) {
     for (let attempt = 1; ; attempt++) {
       try {
         await pgPool.query(SCHEMA);
+        await widenCountColumns(pgPool);
         break;
       } catch (err) {
         if (attempt > retries) {
