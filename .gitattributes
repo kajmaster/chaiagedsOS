@@ -1,0 +1,9 @@
+# Normalise line endings so Windows checkouts stop warning about LF -> CRLF.
+* text=auto eol=lf
+
+# Binary / generated files Git should never try to diff or convert.
+*.png binary
+*.jpg binary
+*.ico binary
+*.db  binary
+package-lock.json -diff linguist-generated

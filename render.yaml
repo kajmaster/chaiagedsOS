@@ -1,0 +1,39 @@
+# Render blueprint — deploys the API and its Postgres database in one click.
+# In Render: New → Blueprint → point at this repo. Then set YOUTUBE_API_KEY
+# and CORS_ORIGIN in the dashboard.
+
+databases:
+  - name: chai-aged-accounts-db
+    databaseName: chai_aged_accounts
+    plan: free
+
+services:
+  - type: web
+    name: chai-aged-accounts-api
+    runtime: node
+    plan: free
+    region: frankfurt
+    rootDir: server
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "22.11.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: chai-aged-accounts-db
+          property: connectionString
+      # Generated once by Render and kept forever. Losing ENCRYPTION_KEY makes
+      # every stored credential permanently unreadable — back it up somewhere safe.
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENCRYPTION_KEY
+        generateValue: true
+      # Set these two manually in the Render dashboard.
+      - key: YOUTUBE_API_KEY
+        sync: false
+      - key: CORS_ORIGIN
+        sync: false
