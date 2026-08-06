@@ -110,16 +110,33 @@ for a first cohort of customers.
 
 1. <https://app.netlify.com> → **Add new site → Import an existing project** →
    pick the repo.
-2. Netlify reads `web/netlify.toml`, so build settings are already correct
-   (base `web`, command `npm run build`, publish `dist`).
-3. **Site settings → Environment variables** → add:
+2. Netlify reads **`netlify.toml` in the repository root**, so the build
+   settings apply automatically: base `web`, command `npm run build`, publish
+   `dist`. Leave the fields in the Netlify UI blank — the file wins.
+3. Deploy. That's it.
 
-   | Key | Value |
-   |---|---|
-   | `VITE_API_URL` | `https://<your-api>.onrender.com` (no trailing slash) |
+**There is no environment variable to set.** `netlify.toml` proxies `/api/*`
+through to Render, so the browser only ever talks to your Netlify domain. That
+removes the two things that usually break this step: a `VITE_API_URL` that has
+to be rebuilt to change, and CORS.
 
-4. Deploy. Then go back to Render and make sure `CORS_ORIGIN` matches the
-   Netlify URL exactly.
+> If you point the API somewhere else later, edit the `to =` line in the
+> `/api/*` redirect in `netlify.toml` and redeploy.
+
+### If the site shows Netlify's "Page not found"
+
+The build never published anything. In order of likelihood:
+
+| Check | Where |
+|---|---|
+| Is `netlify.toml` in the **repo root**, not in `web/`? | Netlify only reads the root one; anywhere else is ignored |
+| Did the build actually succeed? | **Deploys → click the latest deploy → Deploy log** |
+| Do the UI build settings contradict the file? | **Site configuration → Build & deploy** — clear them and let `netlify.toml` win |
+| Is the publish directory `web/dist`? | with `base = "web"`, `publish = "dist"` resolves there |
+
+Confirm the deploy worked by opening `https://your-site.netlify.app/api/health`
+in a browser. JSON means the proxy is live; the app's HTML means the redirect
+order is wrong.
 
 ---
 

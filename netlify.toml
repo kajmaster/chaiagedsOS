@@ -1,0 +1,45 @@
+# Netlify reads this file from the REPOSITORY ROOT only. Keeping it here (rather
+# than inside web/) is what makes the build settings apply at all.
+
+[build]
+  base    = "web"        # run the build inside web/
+  command = "npm run build"
+  publish = "dist"       # relative to base -> web/dist
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# ---------------------------------------------------------------------------
+# API proxy. The browser calls /api/* on this domain and Netlify forwards it to
+# Render. Two problems disappear as a result:
+#   * no VITE_API_URL to set — the app's default relative /api just works
+#   * no CORS at all, because the browser only ever sees its own origin
+# If the Render URL changes, change it here and redeploy.
+# ---------------------------------------------------------------------------
+[[redirects]]
+  from   = "/api/*"
+  to     = "https://chai-aged-accounts-api.onrender.com/api/:splat"
+  status = 200
+  force  = true
+
+# Single-page app: every remaining route falls through to index.html.
+# MUST stay below the /api rule — redirects are matched in order, and this one
+# would otherwise swallow every API call and return HTML instead of JSON.
+[[redirects]]
+  from   = "/*"
+  to     = "/index.html"
+  status = 200
+
+# Security headers — cheap, and they matter for a product holding credentials.
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options        = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy        = "strict-origin-when-cross-origin"
+    Permissions-Policy     = "camera=(), microphone=(), geolocation=()"
+
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
