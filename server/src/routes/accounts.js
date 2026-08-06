@@ -4,8 +4,10 @@ import { newId, encrypt } from '../lib/crypto.js';
 import { requireAuth, blockDemoWrites } from '../lib/auth.js';
 import { loadPortfolio, loadAccountDetail } from '../lib/portfolio.js';
 import { resolveChannel, fetchChannelVideos, isConfigured, YouTubeError } from '../lib/youtube.js';
-import { NICHES } from '../lib/rpm.js';
+import { NICHES, estimateFromChannel } from '../lib/rpm.js';
 import { planError } from '../lib/plans.js';
+import { detectNiche, detectTier } from '../lib/classify.js';
+import { rateLimit } from '../lib/ratelimit.js';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -65,11 +67,38 @@ router.post('/:id/credentials', async (req, res, next) => {
 
 /* ---------------------------------------------------------------- lookups */
 
-/** Preview a channel before it is saved — powers the "paste a URL" flow. */
-router.post('/lookup', blockDemoWrites, async (req, res, next) => {
+/**
+ * Preview a channel before it is saved — powers the "paste a URL" flow.
+ *
+ * Deliberately available to demo visitors: pasting your own channel and seeing
+ * what it is worth is the product's whole pitch, so it must be the one thing a
+ * prospect can do before signing up. It writes nothing, and the rate limit below
+ * keeps the shared YouTube quota safe from abuse.
+ */
+router.post('/lookup', async (req, res, next) => {
   try {
+    const scope = req.isDemo ? 'demo' : 'user';
+    const limit = req.isDemo ? 15 : 60;
+    const gate = rateLimit({ key: `lookup:${scope}:${req.userId}`, limit, windowMs: 3_600_000 });
+    if (!gate.allowed) {
+      return res.status(429).json({
+        error: `That's a lot of lookups. Try again in ${Math.ceil(gate.retryAfter / 60)} minutes.`,
+        retryAfter: gate.retryAfter,
+      });
+    }
+
     const channel = await resolveChannel(req.body?.query);
-    res.json({ channel });
+
+    // Guess the niche and audience here, so the estimate the prospect sees and
+    // the numbers they get after signing up come from identical logic.
+    const { niche, confident } = detectNiche(channel.title, channel.description);
+    const audienceTier = detectTier(channel.country);
+
+    res.json({
+      channel,
+      suggestion: { niche, audienceTier, confident },
+      estimate: estimateFromChannel(channel, niche, audienceTier),
+    });
   } catch (err) {
     if (err instanceof YouTubeError) return res.status(err.status).json({ error: err.message });
     next(err);

@@ -2,7 +2,7 @@ import type {
   Account,
   AccountDetail,
   AudienceTier,
-  ChannelPreview,
+  ChannelLookup,
   Credentials,
   Niche,
   PortfolioSummary,
@@ -90,7 +90,7 @@ export const api = {
   account: (id: string) => request<{ account: AccountDetail }>(`/accounts/${id}`),
   revealCredentials: (id: string) => post<{ credentials: Credentials }>(`/accounts/${id}/credentials`),
 
-  lookupChannel: (query: string) => post<{ channel: ChannelPreview }>('/accounts/lookup', { query }),
+  lookupChannel: (query: string) => post<ChannelLookup>('/accounts/lookup', { query }),
   createAccount: (payload: Record<string, unknown>) => post<{ account: AccountDetail }>('/accounts', payload),
   updateAccount: (id: string, payload: Record<string, unknown>) => patch<{ account: AccountDetail }>(`/accounts/${id}`, payload),
   deleteAccount: (id: string) => del<{ ok: boolean }>(`/accounts/${id}`),

@@ -81,3 +81,56 @@ export function effectiveRpm(account) {
 }
 
 const round2 = (n) => Math.round(n * 100) / 100;
+const round0 = (n) => Math.round(n);
+
+/**
+ * What a channel looks like financially, from its public stats alone.
+ *
+ * This is the first thing a prospect sees after pasting their URL, so it has to
+ * be instant (one cheap API call, no video fetch) and honest — every figure
+ * carries a low/high band rather than pretending to a precision we do not have.
+ */
+export function estimateFromChannel(channel, nicheId, tierId) {
+  const niche = getNiche(nicheId);
+  const mult = getTier(tierId).multiplier;
+
+  const rpm = round2(niche.rpm * mult);
+  const low = round2(niche.low * mult);
+  const high = round2(niche.high * mult);
+
+  const videoCount = Math.max(1, Number(channel.videoCount) || 0);
+  const totalViews = Number(channel.totalViews) || 0;
+  const avgViews = round0(totalViews / videoCount);
+
+  const perThousand = (views, rate) => round0((views / 1000) * rate);
+
+  // Only ~55% of views are typically monetised (ad blockers, non-ad regions,
+  // shorts, unsuitable content). Estimating off raw views overstates earnings.
+  const MONETISED_SHARE = 0.55;
+  const monetisedTotal = totalViews * MONETISED_SHARE;
+  const monetisedAvg = avgViews * MONETISED_SHARE;
+
+  return {
+    niche: niche.id,
+    nicheLabel: niche.label,
+    audienceTier: tierId,
+    tierLabel: getTier(tierId).label,
+    rpm,
+    rpmRange: { low, high },
+    avgViewsPerVideo: avgViews,
+    perVideo: {
+      low: perThousand(monetisedAvg, low),
+      mid: perThousand(monetisedAvg, rpm),
+      high: perThousand(monetisedAvg, high),
+    },
+    lifetime: {
+      low: perThousand(monetisedTotal, low),
+      mid: perThousand(monetisedTotal, rpm),
+      high: perThousand(monetisedTotal, high),
+    },
+    assumptions: {
+      monetisedShare: MONETISED_SHARE,
+      note: 'Estimated from public view counts. Log a real payout and these are replaced by your actual numbers.',
+    },
+  };
+}

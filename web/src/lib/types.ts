@@ -189,6 +189,31 @@ export interface User {
   createdAt: string;
 }
 
+export interface ChannelEstimate {
+  niche: string;
+  nicheLabel: string;
+  audienceTier: string;
+  tierLabel: string;
+  rpm: number;
+  rpmRange: { low: number; high: number };
+  avgViewsPerVideo: number;
+  perVideo: { low: number; mid: number; high: number };
+  lifetime: { low: number; mid: number; high: number };
+  assumptions: { monetisedShare: number; note: string };
+}
+
+export interface ChannelSuggestion {
+  niche: string;
+  audienceTier: string;
+  confident: boolean;
+}
+
+export interface ChannelLookup {
+  channel: ChannelPreview;
+  suggestion: ChannelSuggestion;
+  estimate: ChannelEstimate;
+}
+
 export interface ChannelPreview {
   channelId: string;
   title: string;

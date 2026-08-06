@@ -6,62 +6,25 @@ import { api } from '@/lib/api';
 import { useApp } from '@/store/AppStore';
 import { Field, Modal, SelectField, TextArea, Toggle } from '@/components/ui';
 import { cx, money, number } from '@/lib/format';
-import type { ChannelPreview } from '@/lib/types';
+import type { ChannelEstimate, ChannelPreview } from '@/lib/types';
 
-/** Rough keyword → niche classifier so the customer rarely has to choose. */
-const NICHE_HINTS: [RegExp, string][] = [
-  [/invest|stock|money|finance|wealth|dividend|trading|forex/i, 'finance'],
-  [/real ?estate|property|landlord|realtor/i, 'real_estate'],
-  [/business|startup|entrepreneur|agency|saas|marketing/i, 'business'],
-  [/\bai\b|artificial intelligence|automation|prompt|gpt|llm/i, 'ai'],
-  [/crypto|bitcoin|ethereum|web3|nft|blockchain/i, 'crypto'],
-  [/tech|software|coding|program|developer|gadget|review/i, 'tech'],
-  [/insurance|lawyer|legal|attorney/i, 'insurance'],
-  [/luxury|watch|rolex|supercar|mansion/i, 'luxury'],
-  [/motivat|discipline|mindset|self.?improv|productiv/i, 'self_improve'],
-  [/crime|murder|mystery|detective|unsolved/i, 'true_crime'],
-  [/car|auto|engine|motor|drive/i, 'automotive'],
-  [/fitness|health|workout|gym|diet|nutrition|wellness/i, 'health'],
-  [/tutorial|how ?to|course|learn|education|study/i, 'education'],
-  [/news|politic|breaking|current/i, 'news'],
-  [/travel|destination|nomad|backpack/i, 'travel'],
-  [/beauty|makeup|fashion|skincare|style/i, 'beauty'],
-  [/science|space|physics|astronom|nasa/i, 'science'],
-  [/history|documentar|ancient|war|empire/i, 'history'],
-  [/food|cook|recipe|kitchen|chef|baking/i, 'food'],
-  [/vlog|lifestyle|daily|day in the life/i, 'lifestyle'],
-  [/sport|football|soccer|basketball|nba|nfl/i, 'sports'],
-  [/gam(e|ing)|minecraft|fortnite|roblox|speedrun/i, 'gaming'],
-  [/pet|dog|cat|animal|wildlife/i, 'pets'],
-  [/kids|family|cartoon|nursery/i, 'kids'],
-  [/music|song|beat|remix|lofi/i, 'music'],
-  [/compilation|satisfying|asmr|relax/i, 'compilation'],
-];
-
-function guessNiche(text: string) {
-  for (const [re, id] of NICHE_HINTS) if (re.test(text)) return id;
-  return 'other';
-}
-
-/** Country → the audience tier that actually drives RPM. */
-function guessTier(country: string | null) {
-  if (!country) return 'mixed';
-  if (['US', 'GB', 'CA', 'AU', 'NZ', 'IE'].includes(country)) return 'tier1';
-  if (['DE', 'NL', 'SE', 'NO', 'DK', 'CH', 'AT', 'FI', 'BE', 'FR', 'IT', 'ES'].includes(country)) return 'tier2';
-  if (['PL', 'RO', 'BR', 'MX', 'AR', 'CO', 'CL', 'TR', 'RU', 'UA'].includes(country)) return 'tier3';
-  if (['IN', 'PK', 'BD', 'ID', 'PH', 'VN', 'NG', 'EG', 'KE', 'ZA'].includes(country)) return 'tier4';
-  return 'mixed';
-}
+/*
+ * Niche and audience detection deliberately live on the server (lib/classify.js)
+ * so the estimate a visitor sees here and the numbers they get after signing up
+ * can never disagree.
+ */
 
 const EMPTY_CREDS = { username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' };
 
 export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { niches, audienceTiers, syncAvailable, refresh, toast, user } = useApp();
+  const { niches, audienceTiers, syncAvailable, refresh, toast, user, logout } = useApp();
   const navigate = useNavigate();
 
   const [query, setQuery] = useState('');
   const [looking, setLooking] = useState(false);
   const [preview, setPreview] = useState<ChannelPreview | null>(null);
+  const [estimate, setEstimate] = useState<ChannelEstimate | null>(null);
+  const [nicheUncertain, setNicheUncertain] = useState(false);
   const [lookupError, setLookupError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -84,6 +47,8 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
     if (!open) return;
     setQuery('');
     setPreview(null);
+    setEstimate(null);
+    setNicheUncertain(false);
     setLookupError(null);
     setShowCreds(false);
     setCreds(EMPTY_CREDS);
@@ -100,18 +65,21 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
     setLooking(true);
     setLookupError(null);
     try {
-      const { channel } = await api.lookupChannel(query.trim());
+      const { channel, suggestion, estimate } = await api.lookupChannel(query.trim());
       setPreview(channel);
+      setEstimate(estimate);
+      setNicheUncertain(!suggestion.confident);
       setForm((f) => ({
         ...f,
         nickname: f.nickname || channel.title,
         channelUrl: channel.url,
-        niche: guessNiche(`${channel.title} ${channel.description}`),
-        audienceTier: guessTier(channel.country),
+        niche: suggestion.niche,
+        audienceTier: suggestion.audienceTier,
       }));
     } catch (err) {
       setLookupError((err as Error).message);
       setPreview(null);
+      setEstimate(null);
     } finally {
       setLooking(false);
     }
@@ -177,8 +145,9 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
       width="max-w-3xl"
     >
       {user?.isDemo && (
-        <div className="mb-5 rounded-xl border border-brass-400/25 bg-brass-400/[0.07] px-4 py-3 text-[13px] text-brass-100">
-          You're in the demo workspace. Create a free account to save channels of your own.
+        <div className="mb-5 rounded-xl border border-brass-400/25 bg-brass-400/[0.07] px-4 py-3 text-[13px] leading-relaxed text-brass-100">
+          <strong className="font-semibold">Try it with your own channel.</strong> Paste a real YouTube URL below and we'll show
+          you what it's earning. Saving it needs a free account.
         </div>
       )}
 
@@ -238,6 +207,58 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
               </div>
               <Check className="h-4 w-4 shrink-0 text-jade-400" />
             </motion.div>
+          )}
+
+          {/* The moment that sells the product: paste a URL, see what it earns. */}
+          {estimate && (
+            <motion.div
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.08 }}
+              className="mt-3 rounded-xl border border-white/[0.08] bg-ink-850/60 p-4"
+            >
+              <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                <span className="label !text-brass-400/90">Estimated earnings</span>
+                <span className="chip border-white/10 bg-white/[0.04] text-slate-400">
+                  {estimate.nicheLabel} · ${estimate.rpm.toFixed(2)} RPM
+                </span>
+              </div>
+
+              <div className="grid gap-4 sm:grid-cols-3">
+                <div>
+                  <p className="text-[11px] text-slate-500">Per video</p>
+                  <p className="tnum mt-1 text-lg font-semibold text-white">{money(estimate.perVideo.mid)}</p>
+                  <p className="tnum mt-0.5 text-[11px] text-slate-500">
+                    {money(estimate.perVideo.low)}–{money(estimate.perVideo.high)}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Lifetime so far</p>
+                  <p className="tnum mt-1 text-lg font-semibold text-white">{money(estimate.lifetime.mid, { compact: true })}</p>
+                  <p className="tnum mt-0.5 text-[11px] text-slate-500">
+                    {money(estimate.lifetime.low, { compact: true })}–{money(estimate.lifetime.high, { compact: true })}
+                  </p>
+                </div>
+                <div>
+                  <p className="text-[11px] text-slate-500">Average views</p>
+                  <p className="tnum mt-1 text-lg font-semibold text-white">{number(estimate.avgViewsPerVideo)}</p>
+                  <p className="mt-0.5 text-[11px] text-slate-500">per video</p>
+                </div>
+              </div>
+
+              <p className="mt-3 border-t border-white/[0.06] pt-3 text-[11px] leading-relaxed text-slate-500">
+                Modelled from public view counts, assuming {Math.round(estimate.assumptions.monetisedShare * 100)}% of views are
+                monetised. Log a real payout and your actual numbers replace this everywhere.
+              </p>
+            </motion.div>
+          )}
+
+          {nicheUncertain && preview && (
+            <p className="mt-3 flex items-start gap-2 rounded-xl border border-brass-400/25 bg-brass-400/[0.07] px-3.5 py-2.5 text-[12px] leading-relaxed text-brass-100">
+              <Sparkles className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              We couldn't confidently tell what this channel is about, and the niche drives every revenue figure — pick the right
+              one below.
+            </p>
           )}
         </div>
 
@@ -366,19 +387,28 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
 
         <TextArea label="Notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Upload cadence, editor, anything you'd forget in three months…" />
 
-        <div className="flex items-center justify-between gap-3 border-t border-white/[0.07] pt-5">
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.07] pt-5">
           <p className="flex items-center gap-1.5 text-xs text-slate-500">
             <Sparkles className="h-3 w-3 text-brass-400" />
             Earnings estimated at ${estRpm.toFixed(2)} RPM until you log a real payout.
           </p>
           <div className="flex gap-2">
             <button type="button" onClick={onClose} className="btn-ghost">
-              Cancel
+              {user?.isDemo ? 'Close' : 'Cancel'}
             </button>
-            <button type="submit" disabled={saving} className="btn-primary">
-              {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-              {saving ? 'Saving…' : 'Add channel'}
-            </button>
+            {user?.isDemo ? (
+              // Demo visitors can look a channel up but not save it — so the
+              // button that would save becomes the signup instead.
+              <button type="button" onClick={logout} className="btn-primary">
+                <ArrowRight className="h-4 w-4" />
+                Create a free account to track it
+              </button>
+            ) : (
+              <button type="submit" disabled={saving} className="btn-primary">
+                {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
+                {saving ? 'Saving…' : 'Add channel'}
+              </button>
+            )}
           </div>
         </div>
       </form>
