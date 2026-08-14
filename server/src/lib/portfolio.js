@@ -41,15 +41,6 @@ export function serializeAccount(row, metrics, { reveal = false } = {}) {
     notes: row.notes,
     lastSyncedAt: row.last_synced_at,
     syncError: row.sync_error,
-
-    // Never expose the token itself — only whether one exists.
-    exactRevenue: {
-      connected: Boolean(row.yt_refresh_token),
-      connectedAt: row.yt_connected_at ?? null,
-      channelTitle: row.yt_connected_channel ?? null,
-      syncedAt: row.yt_revenue_synced_at ?? null,
-      error: row.yt_revenue_error ?? null,
-    },
     createdAt: row.created_at,
     updatedAt: row.updated_at,
 

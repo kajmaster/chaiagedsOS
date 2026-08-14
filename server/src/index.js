@@ -9,8 +9,6 @@ import { initDb, driver } from './db.js';
 import authRoutes, { purgeStaleDemos } from './routes/auth.js';
 import accountRoutes from './routes/accounts.js';
 import analyticsRoutes from './routes/analytics.js';
-import oauthRoutes, { refreshAllConnected } from './routes/oauth.js';
-import { isOAuthConfigured } from './lib/googleauth.js';
 import { NICHES, AUDIENCE_TIERS } from './lib/rpm.js';
 import { isConfigured } from './lib/youtube.js';
 import { requireAuth } from './lib/auth.js';
@@ -82,14 +80,12 @@ app.get('/api/meta', (req, res) => {
     niches: NICHES,
     audienceTiers: AUDIENCE_TIERS,
     syncAvailable: isConfigured(),
-    exactRevenueAvailable: isOAuthConfigured(),
   });
 });
 
 app.use('/api/auth', authRoutes);
 app.use('/api/accounts', accountRoutes);
 app.use('/api/analytics', analyticsRoutes);
-app.use('/api/oauth', oauthRoutes);
 
 /* CSV export — accountants ask for this on day one. */
 app.get('/api/export.csv', requireAuth, async (req, res, next) => {
@@ -155,12 +151,7 @@ console.log(`\n  Chai's Aged Accounts OS — API`);
 console.log(`  database : ${started}`);
 console.log(`  yt sync  : ${isConfigured() ? 'enabled' : 'disabled (set YOUTUBE_API_KEY)'}`);
 
-console.log(`  exact rev: ${isOAuthConfigured() ? 'enabled' : 'disabled (set GOOGLE_CLIENT_ID/SECRET/REDIRECT_URI)'}`);
-
 purgeStaleDemos().catch(() => {});
 setInterval(() => purgeStaleDemos().catch(() => {}), 3_600_000).unref();
-
-// Keep connected channels' earnings current without anyone opening the app.
-setInterval(() => refreshAllConnected().catch(() => {}), 12 * 3_600_000).unref();
 
 app.listen(PORT, () => console.log(`  listening: http://localhost:${PORT}\n`));

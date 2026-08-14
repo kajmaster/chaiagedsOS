@@ -8,7 +8,7 @@ import { cx } from '@/lib/format';
 const PROOF = [
   { icon: Wand2, title: 'Zero data entry', body: 'Paste a channel URL. Views, subscribers and uploads sync straight from YouTube.' },
   { icon: TrendingUp, title: 'Profit, not vanity', body: 'Earnings estimated from your niche RPM, minus what every video actually cost you.' },
-  { icon: ShieldCheck, title: 'Encrypted vault', body: 'Logins, 2FA seeds and recovery emails sealed with AES-256 — one channel, one record.' },
+  { icon: ShieldCheck, title: 'Logins in one place', body: 'Username, password, 2FA and recovery email stored with the channel — and exportable as a plain .txt.' },
 ];
 
 /** Static preview of the real dashboard — the first thing a visitor sees. */
@@ -238,7 +238,7 @@ export function Login() {
 
             <div className="mt-6 flex items-center justify-center gap-4 border-t border-white/[0.06] pt-5 text-[11px] text-slate-600">
               <span className="flex items-center gap-1.5">
-                <Lock className="h-3 w-3" /> AES-256 vault
+                <Lock className="h-3 w-3" /> Encrypted at rest
               </span>
               <span className="flex items-center gap-1.5">
                 <Zap className="h-3 w-3" /> YouTube auto-sync

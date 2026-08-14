@@ -15,7 +15,7 @@ of that with a single dashboard:
 - **One-eye view.** Net profit, revenue, spend and 30-day cashflow across the
   whole portfolio, then one card per channel with the same four numbers.
 - **Click for depth.** Every channel opens into a full P&L: break-even progress,
-  monthly performance, per-video profit, and the credential vault.
+  monthly performance, per-video profit, and its login details.
 - **Almost no typing.** Paste a YouTube URL and the app pulls subscribers, views
   and every upload itself. The niche is guessed from the channel's own text, and
   earnings are modelled from that niche's RPM.
@@ -48,11 +48,12 @@ Every channel gets a one-word verdict — **Scaling · Profitable · Recovering 
 Near break-even · Burning cash · Not monetised** — so a portfolio of forty
 channels is still readable at a glance.
 
-### The vault
+### Login details
 Username, email, password, 2FA/secret code and recovery email live with the
 channel they belong to. They are encrypted with **AES-256-GCM** before they
 reach the database, shown masked by default, and decrypted only when explicitly
-revealed. A stolen database dump is worthless without the server's key.
+revealed — and any channel can be exported as a plain **.txt** file the customer
+keeps for themselves.
 
 ### Demo mode
 The login screen has a **"See it with sample data"** button. It builds a
@@ -84,7 +85,7 @@ server/src/
   lib/plans.js       plan limits (the Stripe hook)
   routes/            auth · accounts · videos · payouts · sync
 web/src/
-  pages/             Login · Dashboard · Channels · ChannelDetail · Settings
+  pages/             Login · Dashboard · Channels · ChannelDetail · Analytics · Settings
   components/        UI kit, charts, command palette, add-channel flow
   lib/               API client, formatters, types
 ```
@@ -116,7 +117,7 @@ Locally the API uses a SQLite file in `server/.data/` — nothing to install. Se
 | `YOUTUBE_API_KEY` | no | enables automatic syncing |
 | `DATABASE_URL` | no | Postgres; falls back to local SQLite |
 | `CORS_ORIGIN` | no | comma-separated allowed frontend origins |
-| `VITE_API_URL` | web, prod | the deployed API URL |
+| `VITE_API_URL` | no | only if the frontend is hosted without the /api proxy |
 
 ---
 

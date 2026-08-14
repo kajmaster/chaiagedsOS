@@ -79,18 +79,13 @@ export interface AuthResponse {
 
 export const api = {
   health: () => request<{ ok: boolean; database: string; youtubeSync: boolean }>('/health'),
-  meta: () =>
-    request<{ niches: Niche[]; audienceTiers: AudienceTier[]; syncAvailable: boolean; exactRevenueAvailable: boolean }>('/meta'),
+  meta: () => request<{ niches: Niche[]; audienceTiers: AudienceTier[]; syncAvailable: boolean }>('/meta'),
 
   register: (payload: { email: string; password: string; name?: string }) => post<AuthResponse>('/auth/register', payload),
   login: (payload: { email: string; password: string }) => post<AuthResponse>('/auth/login', payload),
   demo: () => post<AuthResponse>('/auth/demo'),
   me: () => request<{ user: User }>('/auth/me'),
   updateMe: (payload: { name?: string; currency?: string }) => patch<{ user: User }>('/auth/me', payload),
-
-  setupVault: (payload: { salt: string; verifier: string }) => post<{ user: User }>('/auth/vault', payload),
-  rotateVault: (payload: { salt: string; verifier: string; credentials: unknown[] }) =>
-    post<{ user: User; reEncrypted: number }>('/auth/vault/rotate', payload),
 
   portfolio: () => request<PortfolioResponse>('/accounts'),
   analytics: (range: string) => request<AnalyticsResponse>(`/analytics?range=${encodeURIComponent(range)}`),
@@ -114,10 +109,6 @@ export const api = {
     patch<{ account: AccountDetail }>(`/accounts/${id}/videos/${videoId}`, payload),
   deleteVideo: (id: string, videoId: string) => del<{ account: AccountDetail }>(`/accounts/${id}/videos/${videoId}`),
   bulkCost: (id: string, cost: number, onlyEmpty: boolean) => post<{ account: AccountDetail }>(`/accounts/${id}/videos/bulk-cost`, { cost, onlyEmpty }),
-
-  connectYouTube: (id: string) => post<{ url: string }>(`/oauth/youtube/connect/${id}`),
-  refreshExactRevenue: (id: string) => post<{ account: AccountDetail; imported: number }>(`/oauth/youtube/refresh/${id}`),
-  disconnectYouTube: (id: string) => del<{ account: AccountDetail }>(`/oauth/youtube/connect/${id}`),
 
   addPayout: (id: string, payload: { period: string; amount: number; note?: string }) =>
     post<{ account: AccountDetail }>(`/accounts/${id}/payouts`, payload),

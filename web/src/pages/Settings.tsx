@@ -1,7 +1,5 @@
 import React, { useState } from 'react';
-import { Download, Loader2, Lock, LogOut, ShieldCheck, Sparkles, Zap } from 'lucide-react';
-import { VaultSetupModal } from '@/components/VaultGate';
-import { vaultSession } from '@/lib/vault';
+import { Download, Loader2, LogOut, ShieldCheck, Sparkles, Zap } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApp } from '@/store/AppStore';
 import { Field, Panel, SectionTitle } from '@/components/ui';
@@ -11,7 +9,6 @@ export function Settings() {
   const { user, setUser, accounts, summary, syncAvailable, toast, logout, niches } = useApp();
   const [name, setName] = useState(user?.name ?? '');
   const [saving, setSaving] = useState(false);
-  const [vaultOpen, setVaultOpen] = useState(false);
 
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -103,50 +100,6 @@ export function Settings() {
         </div>
       </Panel>
 
-      {/* The trust objection is the one that loses sales: "you're just a guy on
-          the internet." A promise cannot answer it; cryptography can. */}
-      <Panel className="p-6">
-        <SectionTitle>Private vault</SectionTitle>
-
-        {user?.vault.enabled ? (
-          <div className="flex items-start gap-3 rounded-xl border border-jade-500/25 bg-jade-500/[0.06] p-4">
-            <ShieldCheck className="mt-0.5 h-4 w-4 shrink-0 text-jade-400" />
-            <div className="flex-1">
-              <p className="text-sm font-medium text-jade-100">Zero-knowledge encryption is on</p>
-              <p className="mt-1 text-xs leading-relaxed text-jade-200/70">
-                Your logins are encrypted in this browser with your passphrase before they are sent. This service stores only
-                ciphertext — nobody operating it can read them, and neither can anyone who steals the database.
-              </p>
-              <p className="mt-2 text-xs text-jade-200/50">
-                {vaultSession.isUnlocked() ? 'Unlocked for this session.' : 'Locked — you will be asked when you next reveal a credential.'}
-              </p>
-            </div>
-          </div>
-        ) : (
-          <>
-            <div className="flex items-start gap-3 rounded-xl border border-white/[0.06] bg-white/[0.02] p-4">
-              <Lock className="mt-0.5 h-4 w-4 shrink-0 text-brass-400" />
-              <div className="flex-1">
-                <p className="text-sm font-medium text-slate-200">Make your logins unreadable to us</p>
-                <p className="mt-1 text-xs leading-relaxed text-slate-500">
-                  Right now your credentials are encrypted on the server, which means the people running this service could
-                  technically decrypt them. Turn on the private vault and encryption moves into your browser using a passphrase we
-                  never receive — so we <em>cannot</em> read them, rather than promising we won't.
-                </p>
-                <p className="mt-2 text-xs leading-relaxed text-slate-500">
-                  The trade-off: forget the passphrase and those credentials are gone for good. There is no reset, because a reset
-                  would be a back door.
-                </p>
-              </div>
-            </div>
-            <button onClick={() => setVaultOpen(true)} disabled={!!user?.isDemo} className="btn-primary mt-4">
-              <Lock className="h-4 w-4" /> Turn on private vault
-            </button>
-          </>
-        )}
-      </Panel>
-
-      <VaultSetupModal open={vaultOpen} onClose={() => setVaultOpen(false)} />
 
       <Panel className="p-6">
         <SectionTitle>Session</SectionTitle>

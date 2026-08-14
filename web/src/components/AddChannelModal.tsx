@@ -6,8 +6,6 @@ import { api } from '@/lib/api';
 import { useApp } from '@/store/AppStore';
 import { Field, Modal, SelectField, TextArea, Toggle } from '@/components/ui';
 import { cx, money, number } from '@/lib/format';
-import { sealCredentials, vaultSession } from '@/lib/vault';
-import { VaultUnlockModal } from '@/components/VaultGate';
 import type { ChannelEstimate, ChannelPreview } from '@/lib/types';
 
 /*
@@ -44,7 +42,6 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
   });
   const [creds, setCreds] = useState(EMPTY_CREDS);
   const [showCreds, setShowCreds] = useState(false);
-  const [needsUnlock, setNeedsUnlock] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -100,20 +97,6 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
     }
     setSaving(true);
     try {
-      // With the vault on, credentials are encrypted here and the server only
-      // ever receives ciphertext.
-      const anyCredentials = Object.values(creds).some(Boolean);
-      let payloadCreds: Record<string, unknown> = creds;
-      if (user?.vault.enabled && anyCredentials) {
-        const key = vaultSession.get();
-        if (!key) {
-          setSaving(false);
-          setNeedsUnlock(true);
-          return;
-        }
-        payloadCreds = await sealCredentials(key, creds);
-      }
-
       const { account } = await api.createAccount({
         nickname: form.nickname.trim(),
         niche: form.niche,
@@ -131,7 +114,7 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
         monthlyCost: Number(form.monthlyCost) || 0,
         monetized: form.monetized,
         notes: form.notes || null,
-        credentials: payloadCreds,
+        credentials: creds,
       });
 
       // "Every video cost me $X" — one number instead of dozens of rows.
@@ -376,11 +359,7 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
             <KeyRound className="h-4 w-4 shrink-0 text-brass-400" />
             <span className="flex-1">
               <span className="block text-sm font-medium text-slate-200">Account credentials</span>
-              <span className="block text-xs text-slate-500">
-                {user?.vault.enabled
-                  ? 'Encrypted in your browser — unreadable to this service'
-                  : 'Encrypted with AES-256 before it touches the database'}
-              </span>
+<span className="block text-xs text-slate-500">Encrypted with AES-256 before it touches the database</span>
             </span>
             <span className={cx('text-slate-500 transition-transform', showCreds && 'rotate-90')}>
               <ArrowRight className="h-4 w-4" />
@@ -433,7 +412,6 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
           </div>
         </div>
       </form>
-      <VaultUnlockModal open={needsUnlock} onClose={() => setNeedsUnlock(false)} onUnlocked={() => setNeedsUnlock(false)} />
     </Modal>
   );
 }

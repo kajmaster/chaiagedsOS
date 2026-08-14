@@ -97,13 +97,6 @@ export interface Account {
   notes: string | null;
   lastSyncedAt: string | null;
   syncError: string | null;
-  exactRevenue: {
-    connected: boolean;
-    connectedAt: string | null;
-    channelTitle: string | null;
-    syncedAt: string | null;
-    error: string | null;
-  };
   createdAt: string;
   updatedAt: string;
 
@@ -203,7 +196,6 @@ export interface User {
   isDemo: boolean;
   currency: string;
   createdAt: string;
-  vault: { enabled: boolean; salt: string | null; verifier: string | null };
 }
 
 export interface NicheSlice {

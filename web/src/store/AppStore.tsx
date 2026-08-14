@@ -18,7 +18,6 @@ interface AppState {
   niches: Niche[];
   audienceTiers: AudienceTier[];
   syncAvailable: boolean;
-  exactRevenueAvailable: boolean;
   loadingPortfolio: boolean;
   toasts: Toast[];
 
@@ -44,7 +43,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   const [niches, setNiches] = useState<Niche[]>([]);
   const [audienceTiers, setAudienceTiers] = useState<AudienceTier[]>([]);
   const [syncAvailable, setSyncAvailable] = useState(false);
-  const [exactRevenueAvailable, setExactRevenueAvailable] = useState(false);
   const [loadingPortfolio, setLoadingPortfolio] = useState(false);
   const [toasts, setToasts] = useState<Toast[]>([]);
   const toastSeq = useRef(0);
@@ -83,7 +81,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       setNiches(meta.niches);
       setAudienceTiers(meta.audienceTiers);
       setSyncAvailable(meta.syncAvailable);
-      setExactRevenueAvailable(Boolean(meta.exactRevenueAvailable));
     } catch {
       /* meta is decorative on the login screen; ignore failures there */
     }
@@ -163,7 +160,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       niches,
       audienceTiers,
       syncAvailable,
-      exactRevenueAvailable,
       loadingPortfolio,
       toasts,
       login,

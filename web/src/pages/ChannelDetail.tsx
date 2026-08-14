@@ -3,13 +3,13 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
+  Download,
   BadgeCheck,
   BadgeDollarSign,
   Clock,
   ExternalLink,
   KeyRound,
   Loader2,
-  Lock,
   Pencil,
   Plus,
   RefreshCw,
@@ -23,8 +23,6 @@ import { Chip, EmptyState, Field, Meter, Modal, Panel, SectionTitle, SecretRow, 
 import { ChannelChart } from '@/components/charts';
 import { ChannelAvatar } from '@/components/portfolio';
 import { channelAge, cx, dateInput, duration, money, number, percent, relativeTime, shortDate, statusMeta, toneClasses } from '@/lib/format';
-import { needsVaultKey, openCredentials, sealCredentials, vaultSession } from '@/lib/vault';
-import { VaultUnlockModal } from '@/components/VaultGate';
 import type { AccountDetail, Credentials, TimelinePoint, Video } from '@/lib/types';
 
 const DECAY = [0.5, 0.25, 0.15, 0.1];
@@ -85,58 +83,103 @@ function Kpi({ label, value, tone, hint }: { label: string; value: string; tone?
   );
 }
 
-/* ------------------------------------------------------- credential vault */
+/* ------------------------------------------------------ channel details */
+
+const CRED_FIELDS: { key: keyof Credentials; label: string; mono?: boolean }[] = [
+  { key: 'username', label: 'Username' },
+  { key: 'email', label: 'Email' },
+  { key: 'password', label: 'Password', mono: true },
+  { key: 'twoFactor', label: '2FA / secret', mono: true },
+  { key: 'recoveryEmail', label: 'Recovery email' },
+];
+
+/** Everything about a channel as plain text, for the customer's own records. */
+function buildTxt(account: AccountDetail, creds: Credentials | null) {
+  const m = account.metrics;
+  const L: string[] = [];
+  L.push(account.nickname);
+  L.push('='.repeat(account.nickname.length));
+  L.push('');
+  L.push(`Niche          : ${account.nicheLabel}`);
+  L.push(`Audience       : ${account.audienceTierLabel}`);
+  L.push(`Status         : ${statusMeta[account.status]?.label ?? account.status}`);
+  if (account.channelUrl) L.push(`Channel URL    : ${account.channelUrl}`);
+  if (account.accountCreatedAt) L.push(`Channel created: ${shortDate(account.accountCreatedAt)}`);
+  if (account.acquiredAt) L.push(`Acquired       : ${shortDate(account.acquiredAt)}`);
+  L.push('');
+  L.push('LOGIN DETAILS');
+  L.push('-------------');
+  for (const f of CRED_FIELDS) {
+    const value = creds?.[f.key];
+    L.push(`${f.label.padEnd(15)}: ${value || '(not set)'}`);
+  }
+  L.push('');
+  L.push('NUMBERS');
+  L.push('-------');
+  L.push(`Subscribers    : ${number(account.subscribers, false)}`);
+  L.push(`Videos tracked : ${m.videoCount}`);
+  L.push(`Revenue        : ${money(m.revenue)} (${m.revenueSource === 'actual' ? 'from logged payouts' : 'estimated'})`);
+  L.push(`Total spent    : ${money(m.totalCost)}`);
+  L.push(`Profit         : ${money(m.profit, { sign: true })}`);
+  L.push(`ROI            : ${m.roi == null ? '-' : percent(m.roi, { sign: true })}`);
+  L.push(`Effective RPM  : $${m.rpm.rpm.toFixed(2)}`);
+  if (account.notes) {
+    L.push('');
+    L.push('NOTES');
+    L.push('-----');
+    L.push(account.notes);
+  }
+  L.push('');
+  L.push(`Exported ${new Date().toLocaleString()} from Chai's Aged Accounts OS`);
+  // CRLF so the file opens correctly in Windows Notepad, which is where most
+  // people will actually read this.
+  return L.join('\r\n');
+}
+
+function downloadTxt(filename: string, body: string) {
+  const url = URL.createObjectURL(new Blob([body], { type: 'text/plain;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void }) {
   const { toast, user } = useApp();
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [plain, setPlain] = useState<Credentials | null>(null);
-  const [sealed, setSealed] = useState<Credentials | null>(null);
-  const [showStored, setShowStored] = useState(false);
   const [loading, setLoading] = useState(false);
-  const [unlockOpen, setUnlockOpen] = useState(false);
-  const [pendingReveal, setPendingReveal] = useState<keyof Credentials | null>(null);
+
+  /** Fetch the decrypted set once, then reuse it for reveals and export. */
+  const load = async () => {
+    if (plain) return plain;
+    setLoading(true);
+    try {
+      const res = await api.revealCredentials(account.id);
+      setPlain(res.credentials);
+      return res.credentials;
+    } catch (err) {
+      toast({ title: 'Could not read the login details', detail: (err as Error).message, tone: 'error' });
+      return null;
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const reveal = async (field: keyof Credentials) => {
     if (revealed[field]) return setRevealed((r) => ({ ...r, [field]: false }));
-    if (!plain) {
-      setLoading(true);
-      try {
-        const res = await api.revealCredentials(account.id);
-
-        // With the vault on, what comes back is still ciphertext — the final
-        // decryption happens here, with a key the server has never seen.
-        setSealed(res.credentials);
-        if (needsVaultKey(res.credentials)) {
-          const key = vaultSession.get();
-          if (!key) {
-            setPendingReveal(field);
-            setUnlockOpen(true);
-            return;
-          }
-          setPlain(await openCredentials(key, res.credentials));
-        } else {
-          setPlain(res.credentials);
-        }
-      } catch (err) {
-        toast({ title: 'Could not unlock the vault', detail: (err as Error).message, tone: 'error' });
-        return;
-      } finally {
-        setLoading(false);
-      }
-    }
+    if (!(await load())) return;
     setRevealed((r) => ({ ...r, [field]: true }));
   };
 
-  const rows: { key: keyof Credentials; label: string; mono?: boolean }[] = [
-    { key: 'username', label: 'Username' },
-    { key: 'email', label: 'Email' },
-    { key: 'password', label: 'Password', mono: true },
-    { key: 'twoFactor', label: '2FA / secret', mono: true },
-    { key: 'recoveryEmail', label: 'Recovery email' },
-  ];
+  const exportTxt = async () => {
+    const creds = await load();
+    const safe = account.nickname.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
+    downloadTxt(`${safe}.txt`, buildTxt(account, creds));
+  };
 
-  const empty = rows.every((r) => !account.credentials[r.key]);
+  const empty = CRED_FIELDS.every((f) => !account.credentials[f.key]);
 
   return (
     <Panel className="p-6">
@@ -149,21 +192,14 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
           )
         }
       >
-        <span className="flex flex-wrap items-center gap-2">
-          <KeyRound className="h-3.5 w-3.5 text-brass-400" /> Credential vault
-          {user?.vault.enabled ? (
-            <Chip tone="emerald">
-              <Lock className="h-2.5 w-2.5" /> Zero-knowledge
-            </Chip>
-          ) : (
-            <Chip tone="amber">Server-readable</Chip>
-          )}
+        <span className="flex items-center gap-2">
+          <KeyRound className="h-3.5 w-3.5 text-brass-400" /> Login details
         </span>
       </SectionTitle>
 
       {empty ? (
         <p className="py-4 text-sm text-slate-500">
-          No login details saved yet.{' '}
+          Nothing saved yet.{' '}
           <button onClick={onEdit} className="text-brass-300 underline underline-offset-2 hover:text-brass-200">
             Add them
           </button>{' '}
@@ -171,85 +207,29 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
         </p>
       ) : (
         <div>
-          {rows.map((r) => (
+          {CRED_FIELDS.map((f) => (
             <SecretRow
-              key={r.key}
-              label={r.label}
-              mono={r.mono}
-              value={plain?.[r.key] ?? null}
-              masked={account.credentials[r.key]}
-              revealed={!!revealed[r.key]}
-              onReveal={() => reveal(r.key)}
+              key={f.key}
+              label={f.label}
+              mono={f.mono}
+              value={plain?.[f.key] ?? null}
+              masked={account.credentials[f.key]}
+              revealed={!!revealed[f.key]}
+              onReveal={() => reveal(f.key)}
             />
           ))}
         </div>
       )}
 
-      {/* Proof, not reassurance. Customers were told their logins are
-          unreadable to us and had no way to check — so show them the exact
-          bytes the server holds. It is the only part of the guarantee they can
-          verify with their own eyes. */}
-      {user?.vault.enabled && !empty && (
-        <div className="mt-4 rounded-xl border border-white/[0.07] bg-ink-850/60 p-3.5">
-          <button
-            type="button"
-            onClick={async () => {
-              if (!sealed) {
-                setLoading(true);
-                try {
-                  const res = await api.revealCredentials(account.id);
-                  setSealed(res.credentials);
-                } finally {
-                  setLoading(false);
-                }
-              }
-              setShowStored((v) => !v);
-            }}
-            className="flex w-full items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 hover:text-slate-200"
-          >
-            <Lock className="h-3 w-3 text-jade-400" />
-            See exactly what this service stores
-            <span className={cx('ml-auto transition-transform', showStored && 'rotate-90')}>›</span>
-          </button>
-
-          {showStored && sealed && (
-            <div className="mt-3 space-y-2">
-              {(['password', 'twoFactor'] as const).map((f) =>
-                sealed[f] ? (
-                  <div key={f}>
-                    <p className="text-[10px] uppercase tracking-wider text-slate-600">{f === 'password' ? 'Password' : '2FA / secret'}</p>
-                    <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-jade-300/70">{sealed[f]}</p>
-                  </div>
-                ) : null
-              )}
-              <p className="border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-slate-500">
-                That is the whole record. Your passphrase never left this browser, so nobody running this service — or anyone who
-                steals the database — can turn that back into a password.
-              </p>
-            </div>
-          )}
-        </div>
-      )}
-
-      <p className="mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-600">
-        {loading ? <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" /> : <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />}
-        {user?.vault.enabled
-          ? 'Encrypted on your device with your vault passphrase. This service stores only ciphertext and cannot read these values.'
-          : 'Sealed with AES-256-GCM, but decryptable by this server. Turn on your private vault in Settings so not even we can read them.'}
-      </p>
-
-      <VaultUnlockModal
-        open={unlockOpen}
-        onClose={() => {
-          setUnlockOpen(false);
-          setPendingReveal(null);
-        }}
-        onUnlocked={() => {
-          const field = pendingReveal;
-          setPendingReveal(null);
-          if (field) void reveal(field);
-        }}
-      />
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-4">
+        <p className="flex items-center gap-1.5 text-[11px] text-slate-600">
+          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
+          Encrypted at rest, and only decrypted when you ask for it.
+        </p>
+        <button onClick={exportTxt} className="btn-ghost px-3 py-1.5 text-xs">
+          <Download className="h-3.5 w-3.5" /> Export .txt
+        </button>
+      </div>
     </Panel>
   );
 }
@@ -292,7 +272,6 @@ function EditModal({
 }) {
   const { niches, audienceTiers, toast, refresh, user } = useApp();
   const [saving, setSaving] = useState(false);
-  const [unlockOpen, setUnlockOpen] = useState(false);
   const [form, setForm] = useState(() => formFrom(account));
   const [creds, setCreds] = useState({ username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' });
   const [touchedCreds, setTouchedCreds] = useState(false);
@@ -309,20 +288,10 @@ function EditModal({
     setSaving(true);
     try {
       // Only send credential fields the user actually typed into.
-      let credentials: Record<string, string | null> | undefined = touchedCreds
+      const credentials: Record<string, string | null> | undefined = touchedCreds
         ? Object.fromEntries(Object.entries(creds).filter(([, v]) => v !== ''))
         : undefined;
 
-      // Seal them here when the vault is on, so plaintext never leaves.
-      if (credentials && Object.keys(credentials).length && user?.vault.enabled) {
-        const key = vaultSession.get();
-        if (!key) {
-          setSaving(false);
-          setUnlockOpen(true);
-          return;
-        }
-        credentials = await sealCredentials(key, credentials);
-      }
 
       const { account: updated } = await api.updateAccount(account.id, {
         nickname: form.nickname,
@@ -470,121 +439,7 @@ function EditModal({
         </div>
       </form>
 
-      <VaultUnlockModal open={unlockOpen} onClose={() => setUnlockOpen(false)} onUnlocked={() => setUnlockOpen(false)} />
     </Modal>
-  );
-}
-
-/* --------------------------------------------------------- exact revenue */
-
-/**
- * Connecting the channel's own Google account is the only way to get real
- * earnings — an API key can read views but never money. Once connected the
- * server pulls monthly figures on a schedule, so nobody opens AdSense again.
- */
-function ExactRevenuePanel({ account, onChange }: { account: AccountDetail; onChange: (a: AccountDetail) => void }) {
-  const { toast, refresh, user, exactRevenueAvailable } = useApp();
-  const [busy, setBusy] = useState(false);
-  const state = account.exactRevenue;
-
-  if (user?.isDemo) return null;
-
-  // Offering a button that can only fail is worse than not offering it. Until
-  // the Google OAuth credentials are set, say what is missing instead.
-  if (!exactRevenueAvailable && !state.connected) {
-    return (
-      <Panel className="flex flex-wrap items-center gap-4 p-4">
-        <Wallet className="h-5 w-5 shrink-0 text-slate-600" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-slate-300">Exact earnings — not switched on yet</p>
-          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-            Revenue is estimated from this channel's niche until either a payout is logged, or the server is given Google OAuth
-            credentials so real figures can be pulled automatically. See EXACT-REVENUE.md.
-          </p>
-        </div>
-      </Panel>
-    );
-  }
-
-  const connect = async () => {
-    setBusy(true);
-    try {
-      const { url } = await api.connectYouTube(account.id);
-      window.location.href = url; // hand off to Google's consent screen
-    } catch (err) {
-      toast({ title: 'Could not start the connection', detail: (err as Error).message, tone: 'error' });
-      setBusy(false);
-    }
-  };
-
-  const pull = async () => {
-    setBusy(true);
-    try {
-      const res = await api.refreshExactRevenue(account.id);
-      onChange(res.account);
-      await refresh();
-      toast({ title: `Pulled ${res.imported} months of real earnings`, tone: 'success' });
-    } catch (err) {
-      toast({ title: 'Could not pull earnings', detail: (err as Error).message, tone: 'error' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const disconnect = async () => {
-    if (!confirm('Disconnect this channel? Earnings already imported stay, but they will stop updating.')) return;
-    setBusy(true);
-    try {
-      const res = await api.disconnectYouTube(account.id);
-      onChange(res.account);
-      await refresh();
-      toast({ title: 'Disconnected', tone: 'success' });
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  if (state.connected) {
-    return (
-      <Panel className="flex flex-wrap items-center gap-4 border-jade-500/20 bg-jade-500/[0.04] p-4">
-        <BadgeCheck className="h-5 w-5 shrink-0 text-jade-400" />
-        <div className="min-w-0 flex-1">
-          <p className="text-[13px] font-semibold text-jade-100">
-            Exact earnings connected{state.channelTitle ? ` · ${state.channelTitle}` : ''}
-          </p>
-          <p className="mt-0.5 text-xs text-jade-200/60">
-            {state.error
-              ? state.error
-              : `Real figures from YouTube Analytics, refreshed automatically. Last pulled ${relativeTime(state.syncedAt)}.`}
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <button onClick={pull} disabled={busy} className="btn-ghost px-3 py-1.5 text-xs">
-            <RefreshCw className={cx('h-3.5 w-3.5', busy && 'animate-spin')} /> Pull now
-          </button>
-          <button onClick={disconnect} disabled={busy} className="btn-quiet px-2.5 py-1.5 text-xs">
-            Disconnect
-          </button>
-        </div>
-      </Panel>
-    );
-  }
-
-  return (
-    <Panel className="flex flex-wrap items-center gap-4 p-4">
-      <Wallet className="h-5 w-5 shrink-0 text-brass-400" />
-      <div className="min-w-0 flex-1">
-        <p className="text-[13px] font-semibold text-slate-100">Want exact earnings instead of an estimate?</p>
-        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
-          Connect this channel's Google account once and real monthly revenue is pulled from YouTube Analytics automatically —
-          no AdSense, no typing. Read-only access to earnings figures; it cannot upload, edit or delete anything.
-        </p>
-      </div>
-      <button onClick={connect} disabled={busy} className="btn-primary px-3 py-2 text-[13px]">
-        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeDollarSign className="h-4 w-4" />}
-        Connect for exact revenue
-      </button>
-    </Panel>
   );
 }
 
@@ -933,9 +788,6 @@ export function ChannelDetail() {
           Last sync failed: {account.syncError}
         </div>
       )}
-
-      {/* ------------------------------------------------- exact revenue */}
-      <ExactRevenuePanel account={account} onChange={setAccount} />
 
       {/* ----------------------------------------------------- KPI strip */}
       <Panel className="grid grid-cols-2 divide-x divide-y divide-white/[0.05] sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
