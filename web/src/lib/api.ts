@@ -114,6 +114,10 @@ export const api = {
   deleteVideo: (id: string, videoId: string) => del<{ account: AccountDetail }>(`/accounts/${id}/videos/${videoId}`),
   bulkCost: (id: string, cost: number, onlyEmpty: boolean) => post<{ account: AccountDetail }>(`/accounts/${id}/videos/bulk-cost`, { cost, onlyEmpty }),
 
+  connectYouTube: (id: string) => post<{ url: string }>(`/oauth/youtube/connect/${id}`),
+  refreshExactRevenue: (id: string) => post<{ account: AccountDetail; imported: number }>(`/oauth/youtube/refresh/${id}`),
+  disconnectYouTube: (id: string) => del<{ account: AccountDetail }>(`/oauth/youtube/connect/${id}`),
+
   addPayout: (id: string, payload: { period: string; amount: number; note?: string }) =>
     post<{ account: AccountDetail }>(`/accounts/${id}/payouts`, payload),
   deletePayout: (id: string, payoutId: string) => del<{ account: AccountDetail }>(`/accounts/${id}/payouts/${payoutId}`),

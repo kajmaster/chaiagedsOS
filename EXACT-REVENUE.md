@@ -26,24 +26,41 @@ exact figures with no OAuth, no permissions, and nothing to break.
 
 ---
 
-## Fully automatic exact revenue
+## Fully automatic exact revenue — built, waiting on Google
 
-Requires the **YouTube Analytics API** and the channel owner granting access via
-OAuth (scope `yt-analytics-monetary.readonly`). Only the owner can read their own
-earnings — an API key cannot, which is why the current sync gives views but not
-dollars.
+**The integration is written and deployed.** A channel page shows *"Connect for
+exact revenue"*, which sends the customer to Google's consent screen; the
+callback stores a refresh token, imports up to 24 months of real monthly
+earnings as payouts, and a background job refreshes every connected channel
+twice a day. Because payouts already override the RPM model everywhere, a
+connected channel simply starts reporting exact figures — dashboard, charts,
+analytics and CSV all follow with no further work.
 
-Rough shape of the work:
+**What is left is a Google configuration task, not code.** Fill in these and it
+switches on:
 
-1. OAuth client (Web application) in the same Google Cloud project.
-2. `GET /api/auth/youtube` → consent screen; `GET /api/auth/youtube/callback`
-   stores the **refresh token** against the account.
-3. Nightly job calls `reports.query` with
-   `metrics=estimatedRevenue,estimatedAdRevenue,cpm,playbackBasedCpm` and writes
-   the result in as a payout — the data model already supports this, so nothing
-   downstream changes.
+| Variable | Where |
+|---|---|
+| `GOOGLE_CLIENT_ID` | Cloud Console → Credentials → OAuth client ID (Web application) |
+| `GOOGLE_CLIENT_SECRET` | same screen |
+| `GOOGLE_REDIRECT_URI` | `https://your-api.onrender.com/api/oauth/youtube/callback` — must be listed under *Authorised redirect URIs* |
+| `APP_URL` | your Netlify URL, so customers land back in the app |
 
-Store refresh tokens encrypted, and note they are as sensitive as a password.
+`/api/meta` reports `exactRevenueAvailable`, so the UI hides the feature until
+the server is configured.
+
+### What the customer is actually granting
+
+Two read-only scopes: `yt-analytics-monetary.readonly` and `youtube.readonly`.
+They permit reading earnings and channel data and nothing else — no uploading,
+editing, deleting or posting. Say this on the button, because "connect your
+YouTube account" otherwise sounds like handing over the keys.
+
+> **One honest caveat.** The refresh token has to be readable by the server, or
+> it could not fetch earnings while the customer is asleep. It is encrypted with
+> `ENCRYPTION_KEY`, but unlike the credential vault it is *not* zero-knowledge —
+> that is the unavoidable price of unattended sync. Channel passwords stay
+> zero-knowledge; only this token is different.
 
 ---
 

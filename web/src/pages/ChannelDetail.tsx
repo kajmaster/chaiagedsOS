@@ -418,6 +418,102 @@ function EditModal({
   );
 }
 
+/* --------------------------------------------------------- exact revenue */
+
+/**
+ * Connecting the channel's own Google account is the only way to get real
+ * earnings — an API key can read views but never money. Once connected the
+ * server pulls monthly figures on a schedule, so nobody opens AdSense again.
+ */
+function ExactRevenuePanel({ account, onChange }: { account: AccountDetail; onChange: (a: AccountDetail) => void }) {
+  const { toast, refresh, user } = useApp();
+  const [busy, setBusy] = useState(false);
+  const state = account.exactRevenue;
+
+  if (user?.isDemo) return null;
+
+  const connect = async () => {
+    setBusy(true);
+    try {
+      const { url } = await api.connectYouTube(account.id);
+      window.location.href = url; // hand off to Google's consent screen
+    } catch (err) {
+      toast({ title: 'Could not start the connection', detail: (err as Error).message, tone: 'error' });
+      setBusy(false);
+    }
+  };
+
+  const pull = async () => {
+    setBusy(true);
+    try {
+      const res = await api.refreshExactRevenue(account.id);
+      onChange(res.account);
+      await refresh();
+      toast({ title: `Pulled ${res.imported} months of real earnings`, tone: 'success' });
+    } catch (err) {
+      toast({ title: 'Could not pull earnings', detail: (err as Error).message, tone: 'error' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const disconnect = async () => {
+    if (!confirm('Disconnect this channel? Earnings already imported stay, but they will stop updating.')) return;
+    setBusy(true);
+    try {
+      const res = await api.disconnectYouTube(account.id);
+      onChange(res.account);
+      await refresh();
+      toast({ title: 'Disconnected', tone: 'success' });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (state.connected) {
+    return (
+      <Panel className="flex flex-wrap items-center gap-4 border-jade-500/20 bg-jade-500/[0.04] p-4">
+        <BadgeCheck className="h-5 w-5 shrink-0 text-jade-400" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-jade-100">
+            Exact earnings connected{state.channelTitle ? ` · ${state.channelTitle}` : ''}
+          </p>
+          <p className="mt-0.5 text-xs text-jade-200/60">
+            {state.error
+              ? state.error
+              : `Real figures from YouTube Analytics, refreshed automatically. Last pulled ${relativeTime(state.syncedAt)}.`}
+          </p>
+        </div>
+        <div className="flex gap-2">
+          <button onClick={pull} disabled={busy} className="btn-ghost px-3 py-1.5 text-xs">
+            <RefreshCw className={cx('h-3.5 w-3.5', busy && 'animate-spin')} /> Pull now
+          </button>
+          <button onClick={disconnect} disabled={busy} className="btn-quiet px-2.5 py-1.5 text-xs">
+            Disconnect
+          </button>
+        </div>
+      </Panel>
+    );
+  }
+
+  return (
+    <Panel className="flex flex-wrap items-center gap-4 p-4">
+      <Wallet className="h-5 w-5 shrink-0 text-brass-400" />
+      <div className="min-w-0 flex-1">
+        <p className="text-[13px] font-semibold text-slate-100">Want exact earnings instead of an estimate?</p>
+        <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+          Connect this channel's Google account once and real monthly revenue is pulled from YouTube Analytics automatically —
+          no AdSense, no typing. Read-only access to earnings figures; it cannot upload, edit or delete anything.
+        </p>
+      </div>
+      <button onClick={connect} disabled={busy} className="btn-primary px-3 py-2 text-[13px]">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <BadgeDollarSign className="h-4 w-4" />}
+        Connect for exact revenue
+      </button>
+    </Panel>
+  );
+}
+
 /* ----------------------------------------------------------- video table */
 
 function VideoTable({ account, onChange }: { account: AccountDetail; onChange: (a: AccountDetail) => void }) {
@@ -763,6 +859,9 @@ export function ChannelDetail() {
           Last sync failed: {account.syncError}
         </div>
       )}
+
+      {/* ------------------------------------------------- exact revenue */}
+      <ExactRevenuePanel account={account} onChange={setAccount} />
 
       {/* ----------------------------------------------------- KPI strip */}
       <Panel className="grid grid-cols-2 divide-x divide-y divide-white/[0.05] sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">

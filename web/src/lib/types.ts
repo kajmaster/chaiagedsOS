@@ -97,6 +97,13 @@ export interface Account {
   notes: string | null;
   lastSyncedAt: string | null;
   syncError: string | null;
+  exactRevenue: {
+    connected: boolean;
+    connectedAt: string | null;
+    channelTitle: string | null;
+    syncedAt: string | null;
+    error: string | null;
+  };
   createdAt: string;
   updatedAt: string;
 

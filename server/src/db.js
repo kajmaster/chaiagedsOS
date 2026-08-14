@@ -93,6 +93,14 @@ const ADD_COLUMNS = {
   accounts: [
     ["cost_model", "TEXT NOT NULL DEFAULT 'flat'"],
     ['cost_per_minute', 'REAL NOT NULL DEFAULT 0'],
+    // Google refresh token for exact-revenue sync. Encrypted with the server
+    // key, and necessarily server-readable: the whole point is that the server
+    // can fetch earnings on a schedule without the customer being present.
+    ['yt_refresh_token', 'TEXT'],
+    ['yt_connected_at', 'TEXT'],
+    ['yt_connected_channel', 'TEXT'],
+    ['yt_revenue_synced_at', 'TEXT'],
+    ['yt_revenue_error', 'TEXT'],
   ],
   videos: [['duration_seconds', 'BIGINT NOT NULL DEFAULT 0']],
 };

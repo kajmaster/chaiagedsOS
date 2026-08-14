@@ -36,8 +36,17 @@ services:
         generateValue: true
       - key: ENCRYPTION_KEY
         generateValue: true
-      # Set these two manually in the Render dashboard.
+      # Set these manually in the Render dashboard.
       - key: YOUTUBE_API_KEY
         sync: false
       - key: CORS_ORIGIN
+        sync: false
+      - key: APP_URL
+        sync: false
+      # Optional — exact revenue via YouTube Analytics. See EXACT-REVENUE.md.
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
         sync: false

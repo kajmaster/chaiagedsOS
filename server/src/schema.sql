@@ -62,6 +62,13 @@ CREATE TABLE IF NOT EXISTS accounts (
   cred_2fa          TEXT,
   cred_recovery     TEXT,
 
+  -- Exact-revenue connection (YouTube Analytics OAuth).
+  yt_refresh_token     TEXT,
+  yt_connected_at      TEXT,
+  yt_connected_channel TEXT,
+  yt_revenue_synced_at TEXT,
+  yt_revenue_error     TEXT,
+
   last_synced_at    TEXT,
   sync_error        TEXT,
   created_at        TEXT NOT NULL,
