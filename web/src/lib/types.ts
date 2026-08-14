@@ -45,6 +45,10 @@ export interface AccountMetrics {
   amountToBreakeven: number;
   monthsToBreakeven: number | null;
 
+  costModel: 'flat' | 'per_minute';
+  costPerMinute: number;
+  totalMinutes: number;
+
   videoCount: number;
   totalViews: number;
   avgViews: number;
@@ -87,6 +91,8 @@ export interface Account {
 
   monetized: boolean;
   rpmOverride: number | null;
+  costModel: 'flat' | 'per_minute';
+  costPerMinute: number;
 
   notes: string | null;
   lastSyncedAt: string | null;
@@ -105,10 +111,13 @@ export interface Video {
   title: string;
   thumbnail: string | null;
   publishedAt: string | null;
+  durationSeconds: number;
   views: number;
   likes: number;
   comments: number;
   cost: number;
+  minuteCost: number;
+  extraCost: number;
   revenue: number;
   estimatedRevenue: number;
   revenueIsActual: boolean;

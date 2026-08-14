@@ -90,6 +90,11 @@ const ADD_COLUMNS = {
     ['vault_salt', 'TEXT'],
     ['vault_verifier', 'TEXT'],
   ],
+  accounts: [
+    ["cost_model", "TEXT NOT NULL DEFAULT 'flat'"],
+    ['cost_per_minute', 'REAL NOT NULL DEFAULT 0'],
+  ],
+  videos: [['duration_seconds', 'BIGINT NOT NULL DEFAULT 0']],
 };
 
 async function existingColumns(table) {

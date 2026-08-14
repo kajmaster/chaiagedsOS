@@ -35,6 +35,8 @@ export function serializeAccount(row, metrics, { reveal = false } = {}) {
 
     monetized: bool(row.monetized),
     rpmOverride: row.rpm_override == null ? null : Number(row.rpm_override),
+    costModel: row.cost_model === 'per_minute' ? 'per_minute' : 'flat',
+    costPerMinute: num(row.cost_per_minute),
 
     notes: row.notes,
     lastSyncedAt: row.last_synced_at,
@@ -70,10 +72,13 @@ export function serializeVideo(v) {
     title: v.title,
     thumbnail: v.thumbnail,
     publishedAt: v.published_at,
+    durationSeconds: v.durationSeconds,
     views: v.views,
     likes: num(v.likes),
     comments: num(v.comments),
     cost: v.cost,
+    minuteCost: v.minuteCost,
+    extraCost: v.extraCost,
     revenue: v.revenue,
     estimatedRevenue: v.estimatedRevenue,
     revenueIsActual: v.revenueIsActual,

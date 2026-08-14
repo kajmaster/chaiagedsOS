@@ -42,15 +42,32 @@ export function computeAccountMetrics(account, videos = [], payouts = [], now = 
   const niche = getNiche(account.niche);
   const tier = getTier(account.audience_tier);
 
+  /**
+   * Production cost per video. Two billing models, because editing is bought
+   * both ways: a flat price per video, or a rate per finished minute (how
+   * pay-as-you-go services charge). In per-minute mode the stored `cost` stays
+   * meaningful as an extra — a thumbnail or voiceover on top of the edit — so
+   * switching models never silently discards a number the customer typed.
+   */
+  const perMinute = account.cost_model === 'per_minute' ? Number(account.cost_per_minute) || 0 : 0;
+
   const videoStats = videos.map((v) => {
     const views = Number(v.views) || 0;
     const estimated = round2((views / 1000) * rpm.rpm);
     const revenue = v.revenue_actual != null ? round2(v.revenue_actual) : estimated;
-    const cost = round2(v.cost);
+
+    const durationSeconds = Number(v.duration_seconds) || 0;
+    const extraCost = round2(v.cost);
+    const minuteCost = perMinute > 0 && durationSeconds > 0 ? round2((durationSeconds / 60) * perMinute) : 0;
+    const cost = round2(minuteCost + extraCost);
+
     return {
       ...v,
       views,
       cost,
+      durationSeconds,
+      minuteCost,
+      extraCost,
       revenue,
       estimatedRevenue: estimated,
       revenueIsActual: v.revenue_actual != null,
@@ -140,6 +157,10 @@ export function computeAccountMetrics(account, videos = [], payouts = [], now = 
     breakevenPct,
     amountToBreakeven,
     monthsToBreakeven,
+
+    costModel: account.cost_model === 'per_minute' ? 'per_minute' : 'flat',
+    costPerMinute: perMinute,
+    totalMinutes: round2(videoStats.reduce((s, v) => s + v.durationSeconds, 0) / 60),
 
     videoCount: videoStats.length,
     totalViews,

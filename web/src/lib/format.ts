@@ -61,6 +61,17 @@ export function dateInput(iso: string | null | undefined) {
   return Number.isNaN(d.getTime()) ? '' : d.toISOString().slice(0, 10);
 }
 
+/** 754 -> "12:34". Video length, and the billable unit on per-minute pricing. */
+export function duration(seconds: number | null | undefined) {
+  const total = Math.max(0, Math.round(Number(seconds) || 0));
+  if (!total) return '—';
+  const h = Math.floor(total / 3600);
+  const m = Math.floor((total % 3600) / 60);
+  const s = total % 60;
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return h > 0 ? `${h}:${pad(m)}:${pad(s)}` : `${m}:${pad(s)}`;
+}
+
 /** "Aged since 2017 · 9 yrs" — the thing customers actually bought. */
 export function channelAge(iso: string | null | undefined) {
   if (!iso) return null;

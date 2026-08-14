@@ -5,6 +5,7 @@ import {
   ArrowLeft,
   BadgeCheck,
   BadgeDollarSign,
+  Clock,
   ExternalLink,
   KeyRound,
   Loader2,
@@ -20,7 +21,7 @@ import { useApp } from '@/store/AppStore';
 import { Chip, EmptyState, Field, Meter, Modal, Panel, SectionTitle, SecretRow, SelectField, Skeleton, TextArea, Toggle } from '@/components/ui';
 import { ChannelChart } from '@/components/charts';
 import { ChannelAvatar } from '@/components/portfolio';
-import { channelAge, cx, dateInput, money, number, percent, relativeTime, shortDate, statusMeta, toneClasses } from '@/lib/format';
+import { channelAge, cx, dateInput, duration, money, number, percent, relativeTime, shortDate, statusMeta, toneClasses } from '@/lib/format';
 import { needsVaultKey, openCredentials, sealCredentials, vaultSession } from '@/lib/vault';
 import { VaultUnlockModal } from '@/components/VaultGate';
 import type { AccountDetail, Credentials, TimelinePoint, Video } from '@/lib/types';
@@ -198,6 +199,29 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
 
 /* ------------------------------------------------------------- edit modal */
 
+/**
+ * One definition of the edit form's shape, used for both the initial state and
+ * the reset. It was written out twice and the two copies drifted the moment a
+ * field was added.
+ */
+function formFrom(account: AccountDetail) {
+  return {
+    nickname: account.nickname,
+    niche: account.niche,
+    audienceTier: account.audienceTier,
+    status: account.status as string,
+    channelUrl: account.channelUrl ?? '',
+    acquisitionCost: String(account.acquisitionCost || ''),
+    monthlyCost: String(account.monthlyCost || ''),
+    rpmOverride: account.rpmOverride == null ? '' : String(account.rpmOverride),
+    costModel: account.costModel as string,
+    costPerMinute: account.costPerMinute ? String(account.costPerMinute) : '',
+    acquiredAt: dateInput(account.acquiredAt),
+    monetized: account.monetized,
+    notes: account.notes ?? '',
+  };
+}
+
 function EditModal({
   account,
   open,
@@ -212,37 +236,13 @@ function EditModal({
   const { niches, audienceTiers, toast, refresh, user } = useApp();
   const [saving, setSaving] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
-  const [form, setForm] = useState({
-    nickname: account.nickname,
-    niche: account.niche,
-    audienceTier: account.audienceTier,
-    status: account.status,
-    channelUrl: account.channelUrl ?? '',
-    acquisitionCost: String(account.acquisitionCost || ''),
-    monthlyCost: String(account.monthlyCost || ''),
-    rpmOverride: account.rpmOverride == null ? '' : String(account.rpmOverride),
-    acquiredAt: dateInput(account.acquiredAt),
-    monetized: account.monetized,
-    notes: account.notes ?? '',
-  });
+  const [form, setForm] = useState(() => formFrom(account));
   const [creds, setCreds] = useState({ username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' });
   const [touchedCreds, setTouchedCreds] = useState(false);
 
   useEffect(() => {
     if (!open) return;
-    setForm({
-      nickname: account.nickname,
-      niche: account.niche,
-      audienceTier: account.audienceTier,
-      status: account.status,
-      channelUrl: account.channelUrl ?? '',
-      acquisitionCost: String(account.acquisitionCost || ''),
-      monthlyCost: String(account.monthlyCost || ''),
-      rpmOverride: account.rpmOverride == null ? '' : String(account.rpmOverride),
-      acquiredAt: dateInput(account.acquiredAt),
-      monetized: account.monetized,
-      notes: account.notes ?? '',
-    });
+    setForm(formFrom(account));
     setCreds({ username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' });
     setTouchedCreds(false);
   }, [open, account]);
@@ -276,6 +276,8 @@ function EditModal({
         acquisitionCost: Number(form.acquisitionCost) || 0,
         monthlyCost: Number(form.monthlyCost) || 0,
         rpmOverride: form.rpmOverride === '' ? null : Number(form.rpmOverride),
+        costModel: form.costModel,
+        costPerMinute: form.costModel === 'per_minute' ? Number(form.costPerMinute) || 0 : 0,
         acquiredAt: form.acquiredAt ? new Date(form.acquiredAt).toISOString() : null,
         monetized: form.monetized,
         notes: form.notes || null,
@@ -342,6 +344,43 @@ function EditModal({
             placeholder="auto"
             hint="Your real AdSense RPM"
           />
+        </div>
+
+        {/* Editing is bought both ways — a price per video, or a rate per
+            finished minute like the pay-as-you-go services charge. */}
+        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
+          <p className="label mb-3 flex items-center gap-2 !text-brass-400/90">
+            <Clock className="h-3 w-3" /> How production is billed
+          </p>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <SelectField label="Billing model" value={form.costModel} onChange={(e) => set('costModel', e.target.value)}>
+              <option value="flat">Flat price per video</option>
+              <option value="per_minute">Rate per finished minute</option>
+            </SelectField>
+            {form.costModel === 'per_minute' ? (
+              <Field
+                label="Rate per minute"
+                prefix="$"
+                type="number"
+                min="0"
+                step="0.01"
+                value={form.costPerMinute}
+                onChange={(e) => set('costPerMinute', e.target.value)}
+                placeholder="0.00"
+                hint="Applied to every video's real length"
+              />
+            ) : (
+              <div className="flex items-end pb-1 text-xs leading-relaxed text-slate-500">
+                Each video keeps whatever cost you set on it.
+              </div>
+            )}
+          </div>
+          {form.costModel === 'per_minute' && (
+            <p className="mt-3 text-xs leading-relaxed text-slate-500">
+              Cost is calculated from each video's actual runtime, pulled from YouTube. Anything you type into a video's cost is
+              added on top — useful for a thumbnail or voiceover billed separately.
+            </p>
+          )}
         </div>
 
         <Toggle checked={form.monetized} onChange={(v) => set('monetized', v)} label="Monetised" hint="Earnings only count once the channel is in the Partner Programme." />
@@ -438,6 +477,7 @@ function VideoTable({ account, onChange }: { account: AccountDetail; onChange: (
   };
 
   const readOnly = !!user?.isDemo;
+  const perMinute = account.costModel === 'per_minute' && account.costPerMinute > 0;
 
   return (
     <Panel className="overflow-hidden">
@@ -445,14 +485,21 @@ function VideoTable({ account, onChange }: { account: AccountDetail; onChange: (
         <div>
           <h2 className="text-[13px] font-semibold uppercase tracking-[0.18em] text-slate-400">Videos</h2>
           <p className="mt-1 text-xs text-slate-500">
-            {account.videos.length} tracked · {money(account.metrics.avgCostPerVideo)} average cost
+            {account.videos.length} tracked ·{' '}
+            {perMinute
+              ? `${account.metrics.totalMinutes.toFixed(0)} min at ${money(account.costPerMinute)}/min · ${money(
+                  account.metrics.avgCostPerVideo
+                )} average`
+              : `${money(account.metrics.avgCostPerVideo)} average cost`}
           </p>
         </div>
         {!readOnly && (
           <div className="flex gap-2">
-            <button onClick={() => setBulkOpen(true)} className="btn-ghost px-3 py-1.5 text-xs">
-              <BadgeDollarSign className="h-3.5 w-3.5" /> Set cost for all
-            </button>
+            {!perMinute && (
+              <button onClick={() => setBulkOpen(true)} className="btn-ghost px-3 py-1.5 text-xs">
+                <BadgeDollarSign className="h-3.5 w-3.5" /> Set cost for all
+              </button>
+            )}
             <button onClick={() => setAddOpen(true)} className="btn-ghost px-3 py-1.5 text-xs">
               <Plus className="h-3.5 w-3.5" /> Add video
             </button>
@@ -469,9 +516,10 @@ function VideoTable({ account, onChange }: { account: AccountDetail; onChange: (
       ) : (
         <div className="overflow-x-auto">
           <div className="min-w-[760px]">
-            <div className="grid grid-cols-[minmax(0,3fr)_repeat(5,minmax(0,1fr))] gap-4 border-b border-white/[0.06] px-6 py-2.5">
+            <div className="grid grid-cols-[minmax(0,3fr)_repeat(6,minmax(0,1fr))] gap-4 border-b border-white/[0.06] px-6 py-2.5">
               <span className="label">Title</span>
               <span className="label text-right">Published</span>
+              <span className="label text-right">Length</span>
               <span className="label text-right">Views</span>
               <span className="label text-right">Cost</span>
               <span className="label text-right">Revenue</span>
@@ -481,16 +529,26 @@ function VideoTable({ account, onChange }: { account: AccountDetail; onChange: (
             {account.videos.map((v) => (
               <div
                 key={v.id}
-                className="grid grid-cols-[minmax(0,3fr)_repeat(5,minmax(0,1fr))] items-center gap-4 border-b border-white/[0.04] px-6 py-3 last:border-0 transition-colors hover:bg-white/[0.02]"
+                className="grid grid-cols-[minmax(0,3fr)_repeat(6,minmax(0,1fr))] items-center gap-4 border-b border-white/[0.04] px-6 py-3 last:border-0 transition-colors hover:bg-white/[0.02]"
               >
                 <span className="flex min-w-0 items-center gap-3">
                   {v.thumbnail && <img src={v.thumbnail} alt="" className="h-8 w-14 shrink-0 rounded object-cover" />}
                   <span className="truncate text-[13px] text-slate-200">{v.title}</span>
                 </span>
                 <span className="tnum text-right text-xs text-slate-500">{shortDate(v.publishedAt)}</span>
+                <span className="tnum text-right text-[13px] text-slate-400">{duration(v.durationSeconds)}</span>
                 <span className="tnum text-right text-[13px] text-slate-300">{number(v.views)}</span>
                 <span className="text-right">
-                  {readOnly ? (
+                  {perMinute ? (
+                    // Derived from runtime — typing over it would contradict the
+                    // billing model the customer just chose.
+                    <span
+                      className="tnum cursor-help text-[13px] text-slate-300 underline decoration-dotted underline-offset-4"
+                      title={`${duration(v.durationSeconds)} × ${money(account.costPerMinute)}/min = ${money(v.minuteCost)}`}
+                    >
+                      {money(v.cost)}
+                    </span>
+                  ) : readOnly ? (
                     <span className="tnum text-[13px] text-slate-400">{money(v.cost)}</span>
                   ) : (
                     <input

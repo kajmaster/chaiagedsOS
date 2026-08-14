@@ -49,6 +49,11 @@ CREATE TABLE IF NOT EXISTS accounts (
   monetized         INTEGER NOT NULL DEFAULT 0,
   rpm_override      REAL,
 
+  -- How production is billed. 'flat' = a price per video; 'per_minute' = a rate
+  -- per finished minute, which is how pay-as-you-go editing services charge.
+  cost_model        TEXT NOT NULL DEFAULT 'flat',
+  cost_per_minute   REAL NOT NULL DEFAULT 0,
+
   notes             TEXT,
 
   cred_username     TEXT,
@@ -71,6 +76,7 @@ CREATE TABLE IF NOT EXISTS videos (
   title          TEXT NOT NULL,
   thumbnail      TEXT,
   published_at   TEXT,
+  duration_seconds BIGINT NOT NULL DEFAULT 0,
   views          BIGINT NOT NULL DEFAULT 0,
   likes          BIGINT NOT NULL DEFAULT 0,
   comments       BIGINT NOT NULL DEFAULT 0,

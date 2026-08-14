@@ -132,16 +132,18 @@ router.post('/', blockDemoWrites, async (req, res, next) => {
          id, user_id, nickname, niche, audience_tier, status,
          channel_url, channel_id, handle, thumbnail,
          account_created_at, acquired_at, acquisition_cost, monthly_cost,
-         subscribers, total_views, video_count, monetized, rpm_override, notes,
+         subscribers, total_views, video_count, monetized, rpm_override,
+         cost_model, cost_per_minute, notes,
          cred_username, cred_email, cred_password, cred_2fa, cred_recovery,
          last_synced_at, sync_error, created_at, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         id, req.userId, nickname, niche, tier, status,
         text(b.channelUrl), text(b.channelId), text(b.handle), text(b.thumbnail),
         text(b.accountCreatedAt), text(b.acquiredAt) ?? now, money(b.acquisitionCost), money(b.monthlyCost),
         int(b.subscribers), int(b.totalViews), int(b.videoCount), b.monetized ? 1 : 0,
-        b.rpmOverride ? money(b.rpmOverride) : null, text(b.notes),
+        b.rpmOverride ? money(b.rpmOverride) : null,
+        b.costModel === 'per_minute' ? 'per_minute' : 'flat', money(b.costPerMinute), text(b.notes),
         encrypt(b.credentials?.username), encrypt(b.credentials?.email), encrypt(b.credentials?.password),
         encrypt(b.credentials?.twoFactor), encrypt(b.credentials?.recoveryEmail),
         null, null, now, now,
@@ -188,6 +190,8 @@ router.patch('/:id', blockDemoWrites, async (req, res, next) => {
     if (b.videoCount !== undefined) set('video_count', int(b.videoCount));
     if (b.monetized !== undefined) set('monetized', b.monetized ? 1 : 0);
     if (b.rpmOverride !== undefined) set('rpm_override', b.rpmOverride ? money(b.rpmOverride) : null);
+    if (b.costModel !== undefined) set('cost_model', b.costModel === 'per_minute' ? 'per_minute' : 'flat');
+    if (b.costPerMinute !== undefined) set('cost_per_minute', money(b.costPerMinute));
     if (b.notes !== undefined) set('notes', text(b.notes));
 
     // Credentials: only touch fields explicitly present, so a partial save
@@ -260,16 +264,16 @@ export async function syncAccount(userId, accountId) {
     const prior = byYtId.get(v.ytVideoId);
     if (prior) {
       await run(
-        `UPDATE videos SET title = ?, thumbnail = ?, published_at = ?, views = ?, likes = ?, comments = ?, source = 'youtube', updated_at = ?
+        `UPDATE videos SET title = ?, thumbnail = ?, published_at = ?, duration_seconds = ?, views = ?, likes = ?, comments = ?, source = 'youtube', updated_at = ?
          WHERE id = ?`,
-        [v.title, v.thumbnail, v.publishedAt, v.views, v.likes, v.comments, now, prior.id]
+        [v.title, v.thumbnail, v.publishedAt, v.durationSeconds, v.views, v.likes, v.comments, now, prior.id]
       );
       updated++;
     } else {
       await run(
-        `INSERT INTO videos (id, account_id, user_id, yt_video_id, title, thumbnail, published_at, views, likes, comments, cost, revenue_actual, source, created_at, updated_at)
-         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
-        [newId(), accountId, userId, v.ytVideoId, v.title, v.thumbnail, v.publishedAt, v.views, v.likes, v.comments, 0, null, 'youtube', now, now]
+        `INSERT INTO videos (id, account_id, user_id, yt_video_id, title, thumbnail, published_at, duration_seconds, views, likes, comments, cost, revenue_actual, source, created_at, updated_at)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        [newId(), accountId, userId, v.ytVideoId, v.title, v.thumbnail, v.publishedAt, v.durationSeconds, v.views, v.likes, v.comments, 0, null, 'youtube', now, now]
       );
       added++;
     }
@@ -351,11 +355,11 @@ router.post('/:id/videos', blockDemoWrites, async (req, res, next) => {
     const b = req.body || {};
     const now = new Date().toISOString();
     await run(
-      `INSERT INTO videos (id, account_id, user_id, yt_video_id, title, thumbnail, published_at, views, likes, comments, cost, revenue_actual, source, created_at, updated_at)
-       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      `INSERT INTO videos (id, account_id, user_id, yt_video_id, title, thumbnail, published_at, duration_seconds, views, likes, comments, cost, revenue_actual, source, created_at, updated_at)
+       VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         newId(), row.id, req.userId, text(b.ytVideoId), text(b.title) ?? 'Untitled video', text(b.thumbnail),
-        text(b.publishedAt) ?? now, int(b.views), int(b.likes), int(b.comments),
+        text(b.publishedAt) ?? now, int(b.durationSeconds), int(b.views), int(b.likes), int(b.comments),
         money(b.cost), b.revenueActual == null || b.revenueActual === '' ? null : money(b.revenueActual),
         'manual', now, now,
       ]
@@ -381,6 +385,7 @@ router.patch('/:id/videos/:videoId', blockDemoWrites, async (req, res, next) => 
     if (b.title !== undefined) set('title', text(b.title) ?? 'Untitled video');
     if (b.publishedAt !== undefined) set('published_at', text(b.publishedAt));
     if (b.views !== undefined) set('views', int(b.views));
+    if (b.durationSeconds !== undefined) set('duration_seconds', int(b.durationSeconds));
     if (b.cost !== undefined) set('cost', money(b.cost));
     if (b.revenueActual !== undefined) {
       set('revenue_actual', b.revenueActual == null || b.revenueActual === '' ? null : money(b.revenueActual));

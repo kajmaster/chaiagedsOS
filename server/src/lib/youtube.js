@@ -139,10 +139,23 @@ export async function fetchChannelVideos(uploadsPlaylistId, limit = MAX_VIDEOS_P
         likes: Number(v.statistics?.likeCount ?? 0),
         comments: Number(v.statistics?.commentCount ?? 0),
         duration: v.contentDetails?.duration ?? null,
+        durationSeconds: parseDurationSeconds(v.contentDetails?.duration),
       });
     }
   }
   return { videos, truncated: ids.length >= limit };
+}
+
+/**
+ * YouTube returns durations as ISO-8601 (`PT1H2M3S`). Editing services that
+ * bill per finished minute make this a cost input, not a curiosity.
+ */
+export function parseDurationSeconds(iso) {
+  if (!iso || typeof iso !== 'string') return 0;
+  const m = /^P(?:(\d+)D)?T?(?:(\d+)H)?(?:(\d+)M)?(?:(\d+(?:\.\d+)?)S)?$/.exec(iso);
+  if (!m) return 0;
+  const [, d, h, min, s] = m;
+  return Math.round((Number(d || 0) * 86400) + (Number(h || 0) * 3600) + (Number(min || 0) * 60) + Number(s || 0));
 }
 
 export const isConfigured = () => Boolean(process.env.YOUTUBE_API_KEY);
