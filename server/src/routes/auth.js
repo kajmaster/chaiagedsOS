@@ -101,15 +101,13 @@ router.post('/demo', async (req, res, next) => {
            channel_url, channel_id, handle, thumbnail,
            account_created_at, acquired_at, acquisition_cost, monthly_cost,
            subscribers, total_views, video_count, monetized, rpm_override, notes,
-           cred_username, cred_email, cred_password, cred_2fa, cred_recovery,
            last_synced_at, sync_error, created_at, updated_at
-         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+         ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
         [
           a.id, a.user_id, a.nickname, a.niche, a.audience_tier, a.status,
           a.channel_url, a.channel_id, a.handle, a.thumbnail,
           a.account_created_at, a.acquired_at, a.acquisition_cost, a.monthly_cost,
           a.subscribers, a.total_views, a.video_count, a.monetized, a.rpm_override, a.notes,
-          a.cred_username, a.cred_email, a.cred_password, a.cred_2fa, a.cred_recovery,
           a.last_synced_at, a.sync_error, a.created_at, a.updated_at,
         ]
       );

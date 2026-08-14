@@ -57,17 +57,6 @@ router.get('/:id', async (req, res, next) => {
   }
 });
 
-/** Explicit, audited unlock of the credential vault. */
-router.post('/:id/credentials', async (req, res, next) => {
-  try {
-    const detail = await loadAccountDetail(req.userId, req.params.id, { reveal: true });
-    if (!detail) return res.status(404).json({ error: 'Account not found.' });
-    res.json({ credentials: detail.credentials });
-  } catch (err) {
-    next(err);
-  }
-});
-
 /* ---------------------------------------------------------------- lookups */
 
 /**
@@ -134,18 +123,15 @@ router.post('/', blockDemoWrites, async (req, res, next) => {
          account_created_at, acquired_at, acquisition_cost, monthly_cost,
          subscribers, total_views, video_count, monetized, rpm_override,
          cost_model, cost_per_minute, notes,
-         cred_username, cred_email, cred_password, cred_2fa, cred_recovery,
          last_synced_at, sync_error, created_at, updated_at
-       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       ) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       [
         id, req.userId, nickname, niche, tier, status,
         text(b.channelUrl), text(b.channelId), text(b.handle), text(b.thumbnail),
         text(b.accountCreatedAt), text(b.acquiredAt) ?? now, money(b.acquisitionCost), money(b.monthlyCost),
         int(b.subscribers), int(b.totalViews), int(b.videoCount), b.monetized ? 1 : 0,
         b.rpmOverride ? money(b.rpmOverride) : null,
-        b.costModel === 'per_minute' ? 'per_minute' : 'flat', money(b.costPerMinute), text(b.notes),
-        encrypt(b.credentials?.username), encrypt(b.credentials?.email), encrypt(b.credentials?.password),
-        encrypt(b.credentials?.twoFactor), encrypt(b.credentials?.recoveryEmail),
+        b.costModel === 'per_minute' ? 'per_minute' : 'flat', money(b.costPerMinute), encrypt(text(b.notes)),
         null, null, now, now,
       ]
     );
@@ -192,18 +178,8 @@ router.patch('/:id', blockDemoWrites, async (req, res, next) => {
     if (b.rpmOverride !== undefined) set('rpm_override', b.rpmOverride ? money(b.rpmOverride) : null);
     if (b.costModel !== undefined) set('cost_model', b.costModel === 'per_minute' ? 'per_minute' : 'flat');
     if (b.costPerMinute !== undefined) set('cost_per_minute', money(b.costPerMinute));
-    if (b.notes !== undefined) set('notes', text(b.notes));
+    if (b.notes !== undefined) set('notes', encrypt(text(b.notes)));
 
-    // Credentials: only touch fields explicitly present, so a partial save
-    // can never wipe a password the user didn't retype.
-    const c = b.credentials;
-    if (c && typeof c === 'object') {
-      if (c.username !== undefined) set('cred_username', encrypt(c.username));
-      if (c.email !== undefined) set('cred_email', encrypt(c.email));
-      if (c.password !== undefined) set('cred_password', encrypt(c.password));
-      if (c.twoFactor !== undefined) set('cred_2fa', encrypt(c.twoFactor));
-      if (c.recoveryEmail !== undefined) set('cred_recovery', encrypt(c.recoveryEmail));
-    }
 
     if (!sets.length) return res.json({ account: await loadAccountDetail(req.userId, row.id) });
 

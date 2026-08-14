@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 
 import { initDb, driver } from './db.js';
 import authRoutes, { purgeStaleDemos } from './routes/auth.js';
+import { foldCredentialsIntoNotes } from './lib/migrate.js';
 import accountRoutes from './routes/accounts.js';
 import analyticsRoutes from './routes/analytics.js';
 import { NICHES, AUDIENCE_TIERS } from './lib/rpm.js';
@@ -150,6 +151,8 @@ const started = await initDb();
 console.log(`\n  Chai's Aged Accounts OS — API`);
 console.log(`  database : ${started}`);
 console.log(`  yt sync  : ${isConfigured() ? 'enabled' : 'disabled (set YOUTUBE_API_KEY)'}`);
+
+await foldCredentialsIntoNotes().catch((e) => console.error('[migrate]', e));
 
 purgeStaleDemos().catch(() => {});
 setInterval(() => purgeStaleDemos().catch(() => {}), 3_600_000).unref();

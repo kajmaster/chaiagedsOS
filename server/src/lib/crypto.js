@@ -47,6 +47,20 @@ export function decrypt(blob) {
   }
 }
 
+/**
+ * Decrypt, but return the value untouched if it was never encrypted.
+ *
+ * The notes field started life as plaintext and now holds login details, so it
+ * is encrypted going forward. Existing rows are still plaintext and must keep
+ * working — `decrypt` returns '' for anything that is not a v1 envelope, which
+ * would have silently wiped every note written before the change.
+ */
+export function decryptLoose(blob) {
+  if (!blob) return '';
+  const value = String(blob);
+  return value.startsWith('v1:') ? decrypt(value) : value;
+}
+
 /** Never send raw secrets in list views — only a shape hint. */
 export function maskHint(blob) {
   const value = decrypt(blob);

@@ -138,12 +138,17 @@ export function buildDemoWorkspace(userId) {
       video_count: bp.videos,
       monetized: bp.monetized,
       rpm_override: null,
-      notes: idx === 0 ? 'Flagship channel. Two uploads per week, outsourced editing.' : null,
-      cred_username: encrypt(`${slug}.ops`),
-      cred_email: encrypt(`${slug}@protonmail.com`),
-      cred_password: encrypt(`Dm-${bp.seed}x${slug.slice(0, 4)}!Q9`),
-      cred_2fa: encrypt(`JBSW Y3DP EHPK ${String(bp.seed).padStart(4, '0')}`),
-      cred_recovery: encrypt(`recovery.${slug}@gmail.com`),
+      notes: encrypt(
+        [
+          `Username: ${slug}.ops`,
+          `Email: ${slug}@protonmail.com`,
+          `Password: Dm-${bp.seed}x${slug.slice(0, 4)}!Q9`,
+          `2FA / secret: JBSW Y3DP EHPK ${String(bp.seed).padStart(4, '0')}`,
+          `Recovery email: recovery.${slug}@gmail.com`,
+          '',
+          idx === 0 ? 'Flagship channel. Two uploads per week, outsourced editing.' : 'Weekly uploads.',
+        ].join('\n')
+      ),
       last_synced_at: iso(rand() * 2),
       sync_error: null,
       created_at: iso(acquiredDaysAgo),

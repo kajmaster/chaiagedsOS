@@ -1,20 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowRight, Check, KeyRound, Link2, Loader2, Search, Sparkles, Wand2 } from 'lucide-react';
+import { ArrowRight, Check, Link2, Loader2, Search, Sparkles, Wand2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { api } from '@/lib/api';
 import { useApp } from '@/store/AppStore';
 import { Field, Modal, SelectField, TextArea, Toggle } from '@/components/ui';
 import { cx, money, number } from '@/lib/format';
 import type { ChannelEstimate, ChannelPreview } from '@/lib/types';
+import { NOTE_PLACEHOLDER } from '@/lib/notes';
 
 /*
  * Niche and audience detection deliberately live on the server (lib/classify.js)
  * so the estimate a visitor sees here and the numbers they get after signing up
  * can never disagree.
  */
-
-const EMPTY_CREDS = { username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' };
 
 export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () => void }) {
   const { niches, audienceTiers, syncAvailable, refresh, toast, user, logout } = useApp();
@@ -40,8 +39,6 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
     monetized: true,
     notes: '',
   });
-  const [creds, setCreds] = useState(EMPTY_CREDS);
-  const [showCreds, setShowCreds] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -50,8 +47,6 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
     setEstimate(null);
     setNicheUncertain(false);
     setLookupError(null);
-    setShowCreds(false);
-    setCreds(EMPTY_CREDS);
     setForm({
       nickname: '', niche: 'other', audienceTier: 'tier1', status: 'active', channelUrl: '',
       acquisitionCost: '', monthlyCost: '', costPerVideo: '', monetized: true, notes: '',
@@ -114,7 +109,6 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
         monthlyCost: Number(form.monthlyCost) || 0,
         monetized: form.monetized,
         notes: form.notes || null,
-        credentials: creds,
       });
 
       // "Every video cost me $X" — one number instead of dozens of rows.
@@ -349,43 +343,13 @@ export function AddChannelModal({ open, onClose }: { open: boolean; onClose: () 
           hint="Turn off until the channel is accepted into the Partner Programme — revenue then shows as potential, not earned."
         />
 
-        {/* --------------------------------------------------- credentials */}
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02]">
-          <button
-            type="button"
-            onClick={() => setShowCreds((v) => !v)}
-            className="flex w-full items-center gap-3 px-4 py-3.5 text-left"
-          >
-            <KeyRound className="h-4 w-4 shrink-0 text-brass-400" />
-            <span className="flex-1">
-              <span className="block text-sm font-medium text-slate-200">Account credentials</span>
-<span className="block text-xs text-slate-500">Encrypted with AES-256 before it touches the database</span>
-            </span>
-            <span className={cx('text-slate-500 transition-transform', showCreds && 'rotate-90')}>
-              <ArrowRight className="h-4 w-4" />
-            </span>
-          </button>
-
-          {showCreds && (
-            <div className="grid gap-4 border-t border-white/[0.06] p-4 sm:grid-cols-2">
-              <Field label="Username" value={creds.username} onChange={(e) => setCreds({ ...creds, username: e.target.value })} autoComplete="off" />
-              <Field label="Email" value={creds.email} onChange={(e) => setCreds({ ...creds, email: e.target.value })} autoComplete="off" />
-              <Field label="Password" value={creds.password} onChange={(e) => setCreds({ ...creds, password: e.target.value })} autoComplete="new-password" />
-              <Field label="Recovery email" value={creds.recoveryEmail} onChange={(e) => setCreds({ ...creds, recoveryEmail: e.target.value })} autoComplete="off" />
-              <div className="sm:col-span-2">
-                <Field
-                  label="2FA / secret code"
-                  value={creds.twoFactor}
-                  onChange={(e) => setCreds({ ...creds, twoFactor: e.target.value })}
-                  placeholder="Backup code or authenticator seed"
-                  autoComplete="off"
-                />
-              </div>
-            </div>
-          )}
-        </div>
-
-        <TextArea label="Notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} placeholder="Upload cadence, editor, anything you'd forget in three months…" />
+        <TextArea
+          label="Notes & login details"
+          value={form.notes}
+          onChange={(e) => set('notes', e.target.value)}
+          className="min-h-[150px] font-mono text-[13px]"
+          placeholder={NOTE_PLACEHOLDER}
+        />
 
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.07] pt-5">
           <p className="flex items-center gap-1.5 text-xs text-slate-500">

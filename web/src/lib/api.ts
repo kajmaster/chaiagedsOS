@@ -4,7 +4,6 @@ import type {
   AnalyticsResponse,
   AudienceTier,
   ChannelLookup,
-  Credentials,
   Niche,
   PortfolioSummary,
   TimelinePoint,
@@ -90,7 +89,6 @@ export const api = {
   portfolio: () => request<PortfolioResponse>('/accounts'),
   analytics: (range: string) => request<AnalyticsResponse>(`/analytics?range=${encodeURIComponent(range)}`),
   account: (id: string) => request<{ account: AccountDetail }>(`/accounts/${id}`),
-  revealCredentials: (id: string) => post<{ credentials: Credentials }>(`/accounts/${id}/credentials`),
 
   lookupChannel: (query: string) => post<ChannelLookup>('/accounts/lookup', { query }),
   createAccount: (payload: Record<string, unknown>) => post<{ account: AccountDetail }>('/accounts', payload),

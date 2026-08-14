@@ -8,7 +8,10 @@ import {
   BadgeDollarSign,
   Clock,
   ExternalLink,
-  KeyRound,
+  StickyNote,
+  Eye,
+  EyeOff,
+  Copy,
   Loader2,
   Pencil,
   Plus,
@@ -19,13 +22,15 @@ import {
 } from 'lucide-react';
 import { api } from '@/lib/api';
 import { useApp } from '@/store/AppStore';
-import { Chip, EmptyState, Field, Meter, Modal, Panel, SectionTitle, SecretRow, SelectField, Skeleton, TextArea, Toggle } from '@/components/ui';
+import { Chip, EmptyState, Field, Meter, Modal, Panel, SectionTitle, SelectField, Skeleton, TextArea, Toggle } from '@/components/ui';
 import { ChannelChart } from '@/components/charts';
 import { ChannelAvatar } from '@/components/portfolio';
 import { channelAge, cx, dateInput, duration, money, number, percent, relativeTime, shortDate, statusMeta, toneClasses } from '@/lib/format';
-import type { AccountDetail, Credentials, TimelinePoint, Video } from '@/lib/types';
+import type { AccountDetail, TimelinePoint, Video } from '@/lib/types';
+import { NOTE_PLACEHOLDER } from '@/lib/notes';
 
 const DECAY = [0.5, 0.25, 0.15, 0.1];
+
 
 /** Same revenue-decay model the server uses, so the two charts agree. */
 function buildChannelTimeline(account: AccountDetail, months = 12): TimelinePoint[] {
@@ -85,16 +90,8 @@ function Kpi({ label, value, tone, hint }: { label: string; value: string; tone?
 
 /* ------------------------------------------------------ channel details */
 
-const CRED_FIELDS: { key: keyof Credentials; label: string; mono?: boolean }[] = [
-  { key: 'username', label: 'Username' },
-  { key: 'email', label: 'Email' },
-  { key: 'password', label: 'Password', mono: true },
-  { key: 'twoFactor', label: '2FA / secret', mono: true },
-  { key: 'recoveryEmail', label: 'Recovery email' },
-];
-
 /** Everything about a channel as plain text, for the customer's own records. */
-function buildTxt(account: AccountDetail, creds: Credentials | null) {
+function buildTxt(account: AccountDetail) {
   const m = account.metrics;
   const L: string[] = [];
   L.push(account.nickname);
@@ -107,13 +104,6 @@ function buildTxt(account: AccountDetail, creds: Credentials | null) {
   if (account.accountCreatedAt) L.push(`Channel created: ${shortDate(account.accountCreatedAt)}`);
   if (account.acquiredAt) L.push(`Acquired       : ${shortDate(account.acquiredAt)}`);
   L.push('');
-  L.push('LOGIN DETAILS');
-  L.push('-------------');
-  for (const f of CRED_FIELDS) {
-    const value = creds?.[f.key];
-    L.push(`${f.label.padEnd(15)}: ${value || '(not set)'}`);
-  }
-  L.push('');
   L.push('NUMBERS');
   L.push('-------');
   L.push(`Subscribers    : ${number(account.subscribers, false)}`);
@@ -123,12 +113,10 @@ function buildTxt(account: AccountDetail, creds: Credentials | null) {
   L.push(`Profit         : ${money(m.profit, { sign: true })}`);
   L.push(`ROI            : ${m.roi == null ? '-' : percent(m.roi, { sign: true })}`);
   L.push(`Effective RPM  : $${m.rpm.rpm.toFixed(2)}`);
-  if (account.notes) {
-    L.push('');
-    L.push('NOTES');
-    L.push('-----');
-    L.push(account.notes);
-  }
+  L.push('');
+  L.push('NOTES');
+  L.push('-----');
+  L.push(account.notes?.trim() || '(nothing saved)');
   L.push('');
   L.push(`Exported ${new Date().toLocaleString()} from Chai's Aged Accounts OS`);
   // CRLF so the file opens correctly in Windows Notepad, which is where most
@@ -145,41 +133,20 @@ function downloadTxt(filename: string, body: string) {
   URL.revokeObjectURL(url);
 }
 
-function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void }) {
-  const { toast, user } = useApp();
-  const [revealed, setRevealed] = useState<Record<string, boolean>>({});
-  const [plain, setPlain] = useState<Credentials | null>(null);
-  const [loading, setLoading] = useState(false);
+/**
+ * One free-text note per channel — logins, editor, whatever the operator wants.
+ * Five fixed credential fields were more structure than the job needed, and the
+ * one thing people actually asked for was to get it back out again.
+ */
+function NotesPanel({ account, onEdit }: { account: AccountDetail; onEdit: () => void }) {
+  const { user, toast } = useApp();
+  const [shown, setShown] = useState(false);
+  const notes = account.notes?.trim() ?? '';
 
-  /** Fetch the decrypted set once, then reuse it for reveals and export. */
-  const load = async () => {
-    if (plain) return plain;
-    setLoading(true);
-    try {
-      const res = await api.revealCredentials(account.id);
-      setPlain(res.credentials);
-      return res.credentials;
-    } catch (err) {
-      toast({ title: 'Could not read the login details', detail: (err as Error).message, tone: 'error' });
-      return null;
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const reveal = async (field: keyof Credentials) => {
-    if (revealed[field]) return setRevealed((r) => ({ ...r, [field]: false }));
-    if (!(await load())) return;
-    setRevealed((r) => ({ ...r, [field]: true }));
-  };
-
-  const exportTxt = async () => {
-    const creds = await load();
+  const exportTxt = () => {
     const safe = account.nickname.replace(/[^a-z0-9]+/gi, '-').toLowerCase();
-    downloadTxt(`${safe}.txt`, buildTxt(account, creds));
+    downloadTxt(`${safe}.txt`, buildTxt(account));
   };
-
-  const empty = CRED_FIELDS.every((f) => !account.credentials[f.key]);
 
   return (
     <Panel className="p-6">
@@ -193,43 +160,77 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
         }
       >
         <span className="flex items-center gap-2">
-          <KeyRound className="h-3.5 w-3.5 text-brass-400" /> Login details
+          <StickyNote className="h-3.5 w-3.5 text-brass-400" /> Notes &amp; logins
         </span>
       </SectionTitle>
 
-      {empty ? (
+      {!notes ? (
         <p className="py-4 text-sm text-slate-500">
           Nothing saved yet.{' '}
           <button onClick={onEdit} className="text-brass-300 underline underline-offset-2 hover:text-brass-200">
-            Add them
+            Add the login details
           </button>{' '}
           so they live with the channel.
         </p>
       ) : (
-        <div>
-          {CRED_FIELDS.map((f) => (
-            <SecretRow
-              key={f.key}
-              label={f.label}
-              mono={f.mono}
-              value={plain?.[f.key] ?? null}
-              masked={account.credentials[f.key]}
-              revealed={!!revealed[f.key]}
-              onReveal={() => reveal(f.key)}
-            />
-          ))}
-        </div>
+        <>
+          {/* Hidden by default: this is the pane most likely to be on screen
+              during a call or a screen share. */}
+          <div className="relative">
+            <pre
+              className={cx(
+                'max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-white/[0.06] bg-ink-850/60 p-4 font-mono text-[13px] leading-relaxed text-slate-200',
+                !shown && 'select-none blur-sm'
+              )}
+            >
+              {notes}
+            </pre>
+            {!shown && (
+              <button
+                onClick={() => setShown(true)}
+                className="btn-ghost absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 px-3 py-2 text-xs"
+              >
+                <Eye className="h-3.5 w-3.5" /> Show
+              </button>
+            )}
+          </div>
+
+          <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+            {/* The overlay already offers "Show" while hidden — a second one
+                beside it just read as a duplicate. */}
+            {shown ? (
+              <button onClick={() => setShown(false)} className="btn-quiet px-2 py-1 text-xs">
+                <EyeOff className="h-3.5 w-3.5" /> Hide
+              </button>
+            ) : (
+              <span />
+            )}
+            <span className="flex gap-2">
+              <button
+                onClick={async () => {
+                  try {
+                    await navigator.clipboard.writeText(notes);
+                    toast({ title: 'Copied', tone: 'success' });
+                  } catch {
+                    toast({ title: 'Could not copy', tone: 'error' });
+                  }
+                }}
+                className="btn-ghost px-3 py-1.5 text-xs"
+              >
+                <Copy className="h-3.5 w-3.5" /> Copy
+              </button>
+              <button onClick={exportTxt} className="btn-ghost px-3 py-1.5 text-xs">
+                <Download className="h-3.5 w-3.5" /> Export .txt
+              </button>
+            </span>
+          </div>
+        </>
       )}
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-white/[0.05] pt-4">
-        <p className="flex items-center gap-1.5 text-[11px] text-slate-600">
-          {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-          Encrypted at rest, and only decrypted when you ask for it.
-        </p>
-        <button onClick={exportTxt} className="btn-ghost px-3 py-1.5 text-xs">
-          <Download className="h-3.5 w-3.5" /> Export .txt
-        </button>
-      </div>
+      <p className="mt-4 flex items-center gap-1.5 border-t border-white/[0.05] pt-4 text-[11px] text-slate-600">
+        <ShieldCheck className="h-3 w-3" />
+        Encrypted at rest, and only decrypted when this page loads it.
+      </p>
     </Panel>
   );
 }
@@ -273,25 +274,16 @@ function EditModal({
   const { niches, audienceTiers, toast, refresh, user } = useApp();
   const [saving, setSaving] = useState(false);
   const [form, setForm] = useState(() => formFrom(account));
-  const [creds, setCreds] = useState({ username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' });
-  const [touchedCreds, setTouchedCreds] = useState(false);
 
   useEffect(() => {
     if (!open) return;
     setForm(formFrom(account));
-    setCreds({ username: '', email: '', password: '', twoFactor: '', recoveryEmail: '' });
-    setTouchedCreds(false);
   }, [open, account]);
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      // Only send credential fields the user actually typed into.
-      const credentials: Record<string, string | null> | undefined = touchedCreds
-        ? Object.fromEntries(Object.entries(creds).filter(([, v]) => v !== ''))
-        : undefined;
-
 
       const { account: updated } = await api.updateAccount(account.id, {
         nickname: form.nickname,
@@ -307,7 +299,6 @@ function EditModal({
         acquiredAt: form.acquiredAt ? new Date(form.acquiredAt).toISOString() : null,
         monetized: form.monetized,
         notes: form.notes || null,
-        ...(credentials && Object.keys(credentials).length ? { credentials } : {}),
       });
       onSaved(updated);
       await refresh();
@@ -321,13 +312,9 @@ function EditModal({
   };
 
   const set = <K extends keyof typeof form>(k: K, v: (typeof form)[K]) => setForm((f) => ({ ...f, [k]: v }));
-  const setCred = (k: keyof typeof creds, v: string) => {
-    setTouchedCreds(true);
-    setCreds((c) => ({ ...c, [k]: v }));
-  };
 
   return (
-    <Modal open={open} onClose={onClose} title="Edit channel" subtitle="Leave a credential blank to keep what's already stored." width="max-w-3xl">
+    <Modal open={open} onClose={onClose} title="Edit channel" subtitle="Everything about this channel in one place." width="max-w-3xl">
       <form onSubmit={submit} className="space-y-6">
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="Channel name" value={form.nickname} onChange={(e) => set('nickname', e.target.value)} required />
@@ -411,22 +398,13 @@ function EditModal({
 
         <Toggle checked={form.monetized} onChange={(v) => set('monetized', v)} label="Monetised" hint="Earnings only count once the channel is in the Partner Programme." />
 
-        <div className="rounded-2xl border border-white/[0.07] bg-white/[0.02] p-4">
-          <p className="label mb-3 flex items-center gap-2 !text-brass-400/90">
-            <KeyRound className="h-3 w-3" /> Credentials
-          </p>
-          <div className="grid gap-4 sm:grid-cols-2">
-            <Field label="Username" value={creds.username} onChange={(e) => setCred('username', e.target.value)} placeholder="unchanged" autoComplete="off" />
-            <Field label="Email" value={creds.email} onChange={(e) => setCred('email', e.target.value)} placeholder="unchanged" autoComplete="off" />
-            <Field label="Password" value={creds.password} onChange={(e) => setCred('password', e.target.value)} placeholder="unchanged" autoComplete="new-password" />
-            <Field label="Recovery email" value={creds.recoveryEmail} onChange={(e) => setCred('recoveryEmail', e.target.value)} placeholder="unchanged" autoComplete="off" />
-            <div className="sm:col-span-2">
-              <Field label="2FA / secret code" value={creds.twoFactor} onChange={(e) => setCred('twoFactor', e.target.value)} placeholder="unchanged" autoComplete="off" />
-            </div>
-          </div>
-        </div>
-
-        <TextArea label="Notes" value={form.notes} onChange={(e) => set('notes', e.target.value)} />
+        <TextArea
+          label="Notes & login details"
+          value={form.notes}
+          onChange={(e) => set('notes', e.target.value)}
+          className="min-h-[180px] font-mono text-[13px]"
+          placeholder={NOTE_PLACEHOLDER}
+        />
 
         <div className="flex justify-end gap-2 border-t border-white/[0.07] pt-5">
           <button type="button" onClick={onClose} className="btn-ghost">
@@ -881,7 +859,7 @@ export function ChannelDetail() {
             </dl>
           </Panel>
 
-          <Vault account={account} onEdit={() => setEditOpen(true)} />
+          <NotesPanel account={account} onEdit={() => setEditOpen(true)} />
         </div>
       </div>
 
@@ -903,12 +881,6 @@ export function ChannelDetail() {
         </Panel>
       )}
 
-      {account.notes && (
-        <Panel className="p-6">
-          <SectionTitle>Notes</SectionTitle>
-          <p className="whitespace-pre-wrap text-[13px] leading-relaxed text-slate-300">{account.notes}</p>
-        </Panel>
-      )}
 
       <EditModal account={account} open={editOpen} onClose={() => setEditOpen(false)} onSaved={setAccount} />
 

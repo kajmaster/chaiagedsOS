@@ -4,12 +4,12 @@
  */
 import { all } from '../db.js';
 import { computeAccountMetrics, computePortfolio, buildTimeline } from './metrics.js';
-import { decrypt, maskHint } from './crypto.js';
+import { decryptLoose } from './crypto.js';
 
 const bool = (v) => v === 1 || v === true || v === '1';
 const num = (v) => (v == null ? 0 : Number(v));
 
-export function serializeAccount(row, metrics, { reveal = false } = {}) {
+export function serializeAccount(row, metrics) {
   return {
     id: row.id,
     nickname: row.nickname,
@@ -38,27 +38,12 @@ export function serializeAccount(row, metrics, { reveal = false } = {}) {
     costModel: row.cost_model === 'per_minute' ? 'per_minute' : 'flat',
     costPerMinute: num(row.cost_per_minute),
 
-    notes: row.notes,
+    notes: decryptLoose(row.notes),
     lastSyncedAt: row.last_synced_at,
     syncError: row.sync_error,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
 
-    credentials: reveal
-      ? {
-          username: decrypt(row.cred_username),
-          email: decrypt(row.cred_email),
-          password: decrypt(row.cred_password),
-          twoFactor: decrypt(row.cred_2fa),
-          recoveryEmail: decrypt(row.cred_recovery),
-        }
-      : {
-          username: maskHint(row.cred_username),
-          email: maskHint(row.cred_email),
-          password: maskHint(row.cred_password),
-          twoFactor: maskHint(row.cred_2fa),
-          recoveryEmail: maskHint(row.cred_recovery),
-        },
 
     metrics: { ...metrics, videos: undefined },
   };
@@ -121,7 +106,7 @@ export async function loadPortfolio(userId) {
   };
 }
 
-export async function loadAccountDetail(userId, accountId, { reveal = false } = {}) {
+export async function loadAccountDetail(userId, accountId) {
   const [row] = await all('SELECT * FROM accounts WHERE id = ? AND user_id = ?', [accountId, userId]);
   if (!row) return null;
 
@@ -132,7 +117,7 @@ export async function loadAccountDetail(userId, accountId, { reveal = false } = 
 
   const metrics = computeAccountMetrics(row, videoRows, payoutRows);
   return {
-    ...serializeAccount(row, metrics, { reveal }),
+    ...serializeAccount(row, metrics),
     videos: metrics.videos.map(serializeVideo),
     payouts: payoutRows.map((p) => ({ id: p.id, period: p.period, amount: Number(p.amount), note: p.note })),
   };

@@ -58,14 +58,6 @@ export interface AccountMetrics {
   health: Health;
 }
 
-export interface Credentials {
-  username: string | null;
-  email: string | null;
-  password: string | null;
-  twoFactor: string | null;
-  recoveryEmail: string | null;
-}
-
 export interface Account {
   id: string;
   nickname: string;
@@ -100,7 +92,6 @@ export interface Account {
   createdAt: string;
   updatedAt: string;
 
-  credentials: Credentials;
   metrics: AccountMetrics;
 }
 
