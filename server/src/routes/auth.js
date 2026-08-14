@@ -1,7 +1,7 @@
 import express from 'express';
 import bcrypt from 'bcryptjs';
 import { all, one, run } from '../db.js';
-import { newId } from '../lib/crypto.js';
+import { newId, encrypt } from '../lib/crypto.js';
 import { signToken, requireAuth } from '../lib/auth.js';
 import { buildDemoWorkspace } from '../lib/demo.js';
 
@@ -16,6 +16,13 @@ const publicUser = (u) => ({
   isDemo: u.is_demo === 1 || u.is_demo === true,
   currency: u.currency,
   createdAt: u.created_at,
+  // The salt is not a secret — it is needed in the browser to derive the key.
+  // The passphrase never reaches this server, by design.
+  vault: {
+    enabled: Boolean(u.vault_salt),
+    salt: u.vault_salt ?? null,
+    verifier: u.vault_verifier ?? null,
+  },
 });
 
 router.post('/register', async (req, res, next) => {
@@ -160,6 +167,75 @@ router.patch('/me', requireAuth, async (req, res, next) => {
     if (currency !== undefined) await run('UPDATE users SET currency = ? WHERE id = ?', [currency || 'USD', req.userId]);
     const user = await one('SELECT * FROM users WHERE id = ?', [req.userId]);
     res.json({ user: publicUser(user) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Turn on the zero-knowledge vault.
+ *
+ * We receive only a random salt and a verifier blob — never the passphrase and
+ * never a key. That is what lets the product claim, truthfully, that the
+ * operator cannot read customer credentials. Because of that, this endpoint
+ * cannot offer a reset: losing the passphrase loses the data, and any recovery
+ * path we could build would also be a path we could abuse.
+ */
+router.post('/vault', requireAuth, async (req, res, next) => {
+  try {
+    if (req.isDemo) return res.status(403).json({ error: 'The demo workspace has no vault.' });
+
+    const salt = String(req.body?.salt || '').trim();
+    const verifier = String(req.body?.verifier || '').trim();
+    if (!salt || !verifier) return res.status(400).json({ error: 'Missing vault material.' });
+    if (!verifier.startsWith('v2:')) return res.status(400).json({ error: 'Vault material is not client-encrypted.' });
+
+    const user = await one('SELECT vault_salt FROM users WHERE id = ?', [req.userId]);
+    if (user?.vault_salt) {
+      return res.status(409).json({
+        error: 'A vault already exists. Changing the passphrase means re-encrypting every saved credential.',
+        code: 'VAULT_EXISTS',
+      });
+    }
+
+    await run('UPDATE users SET vault_salt = ?, vault_verifier = ? WHERE id = ?', [salt, verifier, req.userId]);
+    const updated = await one('SELECT * FROM users WHERE id = ?', [req.userId]);
+    res.status(201).json({ user: publicUser(updated) });
+  } catch (err) {
+    next(err);
+  }
+});
+
+/**
+ * Replace the vault passphrase. The client must re-encrypt every credential
+ * under the new key and send them together, so the swap is atomic — a failure
+ * halfway through would otherwise leave a vault whose contents cannot be read.
+ */
+router.post('/vault/rotate', requireAuth, async (req, res, next) => {
+  try {
+    if (req.isDemo) return res.status(403).json({ error: 'The demo workspace has no vault.' });
+
+    const salt = String(req.body?.salt || '').trim();
+    const verifier = String(req.body?.verifier || '').trim();
+    const credentials = Array.isArray(req.body?.credentials) ? req.body.credentials : [];
+    if (!salt || !verifier.startsWith('v2:')) return res.status(400).json({ error: 'Missing vault material.' });
+
+    for (const entry of credentials) {
+      const fields = entry?.credentials ?? {};
+      await run(
+        `UPDATE accounts SET cred_username = ?, cred_email = ?, cred_password = ?, cred_2fa = ?, cred_recovery = ?, updated_at = ?
+         WHERE id = ? AND user_id = ?`,
+        [
+          encrypt(fields.username), encrypt(fields.email), encrypt(fields.password),
+          encrypt(fields.twoFactor), encrypt(fields.recoveryEmail),
+          new Date().toISOString(), entry.id, req.userId,
+        ]
+      );
+    }
+
+    await run('UPDATE users SET vault_salt = ?, vault_verifier = ? WHERE id = ?', [salt, verifier, req.userId]);
+    const updated = await one('SELECT * FROM users WHERE id = ?', [req.userId]);
+    res.json({ user: publicUser(updated), reEncrypted: credentials.length });
   } catch (err) {
     next(err);
   }

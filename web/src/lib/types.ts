@@ -187,6 +187,7 @@ export interface User {
   isDemo: boolean;
   currency: string;
   createdAt: string;
+  vault: { enabled: boolean; salt: string | null; verifier: string | null };
 }
 
 export interface NicheSlice {

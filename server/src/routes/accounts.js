@@ -250,7 +250,7 @@ export async function syncAccount(userId, accountId) {
     throw err;
   }
 
-  const videos = await fetchChannelVideos(channel.uploadsPlaylistId, 50);
+  const { videos, truncated } = await fetchChannelVideos(channel.uploadsPlaylistId);
   const existing = await all('SELECT * FROM videos WHERE account_id = ?', [accountId]);
   const byYtId = new Map(existing.filter((v) => v.yt_video_id).map((v) => [v.yt_video_id, v]));
 
@@ -292,7 +292,7 @@ export async function syncAccount(userId, accountId) {
     [newId(), userId, accountId, now.slice(0, 10), channel.subscribers, channel.totalViews]
   );
 
-  return { added, updated, channel };
+  return { added, updated, truncated, fetched: videos.length, channel };
 }
 
 router.post('/:id/sync', blockDemoWrites, async (req, res, next) => {
@@ -300,7 +300,16 @@ router.post('/:id/sync', blockDemoWrites, async (req, res, next) => {
     const result = await syncAccount(req.userId, req.params.id);
     res.json({
       account: await loadAccountDetail(req.userId, req.params.id),
-      sync: { added: result.added, updated: result.updated, channel: result.channel.title },
+      sync: {
+        added: result.added,
+        updated: result.updated,
+        fetched: result.fetched,
+        truncated: result.truncated,
+        // What YouTube says the channel has, so the customer can see at a
+        // glance whether we pulled everything.
+        channelVideoCount: result.channel.videoCount,
+        channel: result.channel.title,
+      },
     });
   } catch (err) {
     if (err instanceof YouTubeError) return res.status(err.status).json({ error: err.message });

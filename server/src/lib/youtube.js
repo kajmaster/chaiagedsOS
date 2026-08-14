@@ -95,9 +95,19 @@ export async function resolveChannel(input) {
   };
 }
 
-/** Pull uploads (newest first) with full statistics. */
-export async function fetchChannelVideos(uploadsPlaylistId, limit = 50) {
-  if (!uploadsPlaylistId) return [];
+/**
+ * Pull uploads (newest first) with full statistics.
+ *
+ * The default used to be 50, which silently truncated every channel with more
+ * uploads than that — a customer with 123 videos saw 50 and, reasonably,
+ * concluded the tool was broken. Paging is cheap: playlistItems and videos both
+ * cost 1 quota unit per 50 items, so a full 123-video channel is 6 units out of
+ * 10,000 a day. The cap below exists only to stop a runaway on a huge archive.
+ */
+export const MAX_VIDEOS_PER_SYNC = 2000;
+
+export async function fetchChannelVideos(uploadsPlaylistId, limit = MAX_VIDEOS_PER_SYNC) {
+  if (!uploadsPlaylistId) return { videos: [], truncated: false };
 
   const ids = [];
   let pageToken;
@@ -114,7 +124,7 @@ export async function fetchChannelVideos(uploadsPlaylistId, limit = 50) {
     pageToken = page.nextPageToken;
     if (!pageToken) break;
   }
-  if (!ids.length) return [];
+  if (!ids.length) return { videos: [], truncated: false };
 
   const videos = [];
   for (let i = 0; i < ids.length; i += 50) {
@@ -132,7 +142,7 @@ export async function fetchChannelVideos(uploadsPlaylistId, limit = 50) {
       });
     }
   }
-  return videos;
+  return { videos, truncated: ids.length >= limit };
 }
 
 export const isConfigured = () => Boolean(process.env.YOUTUBE_API_KEY);

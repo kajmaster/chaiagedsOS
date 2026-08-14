@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import {
   ArrowLeft,
+  BadgeCheck,
   BadgeDollarSign,
   ExternalLink,
   KeyRound,
@@ -20,6 +21,8 @@ import { Chip, EmptyState, Field, Meter, Modal, Panel, SectionTitle, SecretRow, 
 import { ChannelChart } from '@/components/charts';
 import { ChannelAvatar } from '@/components/portfolio';
 import { channelAge, cx, dateInput, money, number, percent, relativeTime, shortDate, statusMeta, toneClasses } from '@/lib/format';
+import { needsVaultKey, openCredentials, sealCredentials, vaultSession } from '@/lib/vault';
+import { VaultUnlockModal } from '@/components/VaultGate';
 import type { AccountDetail, Credentials, TimelinePoint, Video } from '@/lib/types';
 
 const DECAY = [0.5, 0.25, 0.15, 0.1];
@@ -70,12 +73,12 @@ function buildChannelTimeline(account: AccountDetail, months = 12): TimelinePoin
 
 /* ------------------------------------------------------------ KPI strip */
 
-function Kpi({ label, value, tone, hint }: { label: string; value: string; tone?: string; hint?: string }) {
+function Kpi({ label, value, tone, hint }: { label: string; value: string; tone?: string; hint?: React.ReactNode }) {
   return (
     <div className="px-5 py-4">
       <p className="label">{label}</p>
       <p className={cx('tnum mt-2 text-xl font-semibold tracking-tight', tone ?? 'text-white')}>{value}</p>
-      {hint && <p className="mt-1 text-[11px] text-slate-500">{hint}</p>}
+      {hint && <div className="mt-1 text-[11px] text-slate-500">{hint}</div>}
     </div>
   );
 }
@@ -87,6 +90,8 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [plain, setPlain] = useState<Credentials | null>(null);
   const [loading, setLoading] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
+  const [pendingReveal, setPendingReveal] = useState<keyof Credentials | null>(null);
 
   const reveal = async (field: keyof Credentials) => {
     if (revealed[field]) return setRevealed((r) => ({ ...r, [field]: false }));
@@ -94,13 +99,26 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
       setLoading(true);
       try {
         const res = await api.revealCredentials(account.id);
-        setPlain(res.credentials);
+
+        // With the vault on, what comes back is still ciphertext — the final
+        // decryption happens here, with a key the server has never seen.
+        if (needsVaultKey(res.credentials)) {
+          const key = vaultSession.get();
+          if (!key) {
+            setPendingReveal(field);
+            setUnlockOpen(true);
+            return;
+          }
+          setPlain(await openCredentials(key, res.credentials));
+        } else {
+          setPlain(res.credentials);
+        }
       } catch (err) {
         toast({ title: 'Could not unlock the vault', detail: (err as Error).message, tone: 'error' });
-        setLoading(false);
         return;
+      } finally {
+        setLoading(false);
       }
-      setLoading(false);
     }
     setRevealed((r) => ({ ...r, [field]: true }));
   };
@@ -155,10 +173,25 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
         </div>
       )}
 
-      <p className="mt-4 flex items-center gap-1.5 text-[11px] text-slate-600">
-        {loading ? <Loader2 className="h-3 w-3 animate-spin" /> : <ShieldCheck className="h-3 w-3" />}
-        Sealed with AES-256-GCM. Values are only decrypted when you ask for them.
+      <p className="mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-600">
+        {loading ? <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" /> : <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />}
+        {user?.vault.enabled
+          ? 'Encrypted on your device with your vault passphrase. This service stores only ciphertext and cannot read these values.'
+          : 'Sealed with AES-256-GCM. Turn on your private vault in Settings so not even this service can read them.'}
       </p>
+
+      <VaultUnlockModal
+        open={unlockOpen}
+        onClose={() => {
+          setUnlockOpen(false);
+          setPendingReveal(null);
+        }}
+        onUnlocked={() => {
+          const field = pendingReveal;
+          setPendingReveal(null);
+          if (field) void reveal(field);
+        }}
+      />
     </Panel>
   );
 }
@@ -176,8 +209,9 @@ function EditModal({
   onClose: () => void;
   onSaved: (a: AccountDetail) => void;
 }) {
-  const { niches, audienceTiers, toast, refresh } = useApp();
+  const { niches, audienceTiers, toast, refresh, user } = useApp();
   const [saving, setSaving] = useState(false);
+  const [unlockOpen, setUnlockOpen] = useState(false);
   const [form, setForm] = useState({
     nickname: account.nickname,
     niche: account.niche,
@@ -218,9 +252,20 @@ function EditModal({
     setSaving(true);
     try {
       // Only send credential fields the user actually typed into.
-      const credentials = touchedCreds
+      let credentials: Record<string, string | null> | undefined = touchedCreds
         ? Object.fromEntries(Object.entries(creds).filter(([, v]) => v !== ''))
         : undefined;
+
+      // Seal them here when the vault is on, so plaintext never leaves.
+      if (credentials && Object.keys(credentials).length && user?.vault.enabled) {
+        const key = vaultSession.get();
+        if (!key) {
+          setSaving(false);
+          setUnlockOpen(true);
+          return;
+        }
+        credentials = await sealCredentials(key, credentials);
+      }
 
       const { account: updated } = await api.updateAccount(account.id, {
         nickname: form.nickname,
@@ -328,6 +373,8 @@ function EditModal({
           </button>
         </div>
       </form>
+
+      <VaultUnlockModal open={unlockOpen} onClose={() => setUnlockOpen(false)} onUnlocked={() => setUnlockOpen(false)} />
     </Modal>
   );
 }
@@ -555,7 +602,14 @@ export function ChannelDetail() {
       const res = await api.syncAccount(account.id);
       setAccount(res.account);
       await refresh();
-      toast({ title: `Synced ${res.sync.channel}`, detail: `${res.sync.added} new, ${res.sync.updated} updated.`, tone: 'success' });
+
+      const s = res.sync;
+      // Say how many of the channel's uploads we actually hold. Silently
+      // pulling a subset is what made the tool look broken.
+      const detail = s.truncated
+        ? `Pulled the newest ${s.fetched} of ${s.channelVideoCount} uploads.`
+        : `${s.fetched} of ${s.channelVideoCount} uploads tracked · ${s.added} new, ${s.updated} updated.`;
+      toast({ title: `Synced ${s.channel}`, detail, tone: 'success' });
     } catch (err) {
       toast({ title: 'Sync failed', detail: (err as Error).message, tone: 'error' });
     } finally {
@@ -654,7 +708,29 @@ export function ChannelDetail() {
 
       {/* ----------------------------------------------------- KPI strip */}
       <Panel className="grid grid-cols-2 divide-x divide-y divide-white/[0.05] sm:grid-cols-3 lg:grid-cols-6 lg:divide-y-0">
-        <Kpi label="Revenue" value={money(m.revenue)} hint={m.revenueSource === 'actual' ? 'From logged payouts' : 'Estimated from RPM'} />
+        <Kpi
+          label="Revenue"
+          value={money(m.revenue)}
+          hint={
+            m.revenueSource === 'actual' ? (
+              <span className="flex items-center gap-1 text-jade-400/80">
+                <BadgeCheck className="h-3 w-3" /> Exact — from your payouts
+              </span>
+            ) : user?.isDemo ? (
+              'Estimated from RPM'
+            ) : (
+              // The commonest complaint is "the revenue is not exact" — and the
+              // fix already exists, it just was not visible from here.
+              <button
+                type="button"
+                onClick={() => setPayoutOpen(true)}
+                className="text-left text-brass-300/90 underline decoration-dotted underline-offset-4 transition-colors hover:text-brass-200"
+              >
+                Estimated — log a payout for exact numbers
+              </button>
+            )
+          }
+        />
         <Kpi label="Total spent" value={money(m.totalCost)} hint={`${money(m.acquisitionCost)} purchase`} />
         <Kpi
           label="Profit"

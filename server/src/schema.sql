@@ -15,7 +15,13 @@ CREATE TABLE IF NOT EXISTS users (
   plan          TEXT NOT NULL DEFAULT 'starter',
   is_demo       INTEGER NOT NULL DEFAULT 0,
   currency      TEXT NOT NULL DEFAULT 'USD',
-  created_at    TEXT NOT NULL
+  created_at    TEXT NOT NULL,
+
+  -- Zero-knowledge vault. The salt derives the key in the customer's browser;
+  -- the verifier proves a passphrase is right. The passphrase itself is never
+  -- sent here, so credentials sealed with it cannot be read server-side.
+  vault_salt     TEXT,
+  vault_verifier TEXT
 );
 
 CREATE TABLE IF NOT EXISTS accounts (

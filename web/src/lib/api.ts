@@ -87,6 +87,10 @@ export const api = {
   me: () => request<{ user: User }>('/auth/me'),
   updateMe: (payload: { name?: string; currency?: string }) => patch<{ user: User }>('/auth/me', payload),
 
+  setupVault: (payload: { salt: string; verifier: string }) => post<{ user: User }>('/auth/vault', payload),
+  rotateVault: (payload: { salt: string; verifier: string; credentials: unknown[] }) =>
+    post<{ user: User; reEncrypted: number }>('/auth/vault/rotate', payload),
+
   portfolio: () => request<PortfolioResponse>('/accounts'),
   analytics: (range: string) => request<AnalyticsResponse>(`/analytics?range=${encodeURIComponent(range)}`),
   account: (id: string) => request<{ account: AccountDetail }>(`/accounts/${id}`),
@@ -97,7 +101,11 @@ export const api = {
   updateAccount: (id: string, payload: Record<string, unknown>) => patch<{ account: AccountDetail }>(`/accounts/${id}`, payload),
   deleteAccount: (id: string) => del<{ ok: boolean }>(`/accounts/${id}`),
 
-  syncAccount: (id: string) => post<{ account: AccountDetail; sync: { added: number; updated: number; channel: string } }>(`/accounts/${id}/sync`),
+  syncAccount: (id: string) =>
+    post<{
+      account: AccountDetail;
+      sync: { added: number; updated: number; fetched: number; truncated: boolean; channelVideoCount: number; channel: string };
+    }>(`/accounts/${id}/sync`),
   syncAll: () => post<PortfolioResponse & { results: { nickname: string; ok: boolean; error?: string }[] }>('/accounts/sync-all'),
 
   addVideo: (id: string, payload: Record<string, unknown>) => post<{ account: AccountDetail }>(`/accounts/${id}/videos`, payload),

@@ -81,6 +81,40 @@ async function widenCountColumns(pool) {
   return todo.length;
 }
 
+/**
+ * Columns added after the first release. `CREATE TABLE IF NOT EXISTS` ignores
+ * them on an existing database, so they are added explicitly on boot.
+ */
+const ADD_COLUMNS = {
+  users: [
+    ['vault_salt', 'TEXT'],
+    ['vault_verifier', 'TEXT'],
+  ],
+};
+
+async function existingColumns(table) {
+  if (driver === 'postgres') {
+    const rows = await all(
+      `SELECT column_name FROM information_schema.columns WHERE table_schema = current_schema() AND table_name = ?`,
+      [table]
+    );
+    return new Set(rows.map((r) => r.column_name));
+  }
+  const rows = await all(`PRAGMA table_info(${table})`);
+  return new Set(rows.map((r) => r.name));
+}
+
+async function addMissingColumns() {
+  for (const [table, columns] of Object.entries(ADD_COLUMNS)) {
+    const present = await existingColumns(table);
+    for (const [column, type] of columns) {
+      if (present.has(column)) continue;
+      await run(`ALTER TABLE ${table} ADD COLUMN ${column} ${type}`);
+      console.log(`  added ${table}.${column}`);
+    }
+  }
+}
+
 export async function initDb({ retries = 5 } = {}) {
   if (driver === 'postgres') {
     const { default: pg } = await import('pg');
@@ -122,6 +156,7 @@ export async function initDb({ retries = 5 } = {}) {
     sqlite.exec('PRAGMA journal_mode = WAL;');
     sqlite.exec(SCHEMA);
   }
+  await addMissingColumns();
   return driver;
 }
 

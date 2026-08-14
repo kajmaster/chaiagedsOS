@@ -47,10 +47,19 @@ export function decrypt(blob) {
   }
 }
 
+/**
+ * Blobs the browser sealed before sending. The server can strip its own layer
+ * but what is underneath stays unreadable here — that is the whole point.
+ */
+export const isClientSealed = (value) => typeof value === 'string' && value.startsWith('v2:');
+
 /** Never send raw secrets in list views — only a shape hint. */
 export function maskHint(blob) {
   const value = decrypt(blob);
   if (!value) return null;
+  // A client-sealed value has no shape worth hinting at, and pretending
+  // otherwise would leak the ciphertext's length.
+  if (isClientSealed(value)) return '••••••••';
   if (value.includes('@')) {
     const [user, domain] = value.split('@');
     return `${user.slice(0, 2)}${'•'.repeat(Math.max(user.length - 2, 3))}@${domain}`;
