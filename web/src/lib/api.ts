@@ -79,7 +79,8 @@ export interface AuthResponse {
 
 export const api = {
   health: () => request<{ ok: boolean; database: string; youtubeSync: boolean }>('/health'),
-  meta: () => request<{ niches: Niche[]; audienceTiers: AudienceTier[]; syncAvailable: boolean }>('/meta'),
+  meta: () =>
+    request<{ niches: Niche[]; audienceTiers: AudienceTier[]; syncAvailable: boolean; exactRevenueAvailable: boolean }>('/meta'),
 
   register: (payload: { email: string; password: string; name?: string }) => post<AuthResponse>('/auth/register', payload),
   login: (payload: { email: string; password: string }) => post<AuthResponse>('/auth/login', payload),

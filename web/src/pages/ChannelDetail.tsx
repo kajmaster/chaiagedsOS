@@ -9,6 +9,7 @@ import {
   ExternalLink,
   KeyRound,
   Loader2,
+  Lock,
   Pencil,
   Plus,
   RefreshCw,
@@ -90,6 +91,8 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
   const { toast, user } = useApp();
   const [revealed, setRevealed] = useState<Record<string, boolean>>({});
   const [plain, setPlain] = useState<Credentials | null>(null);
+  const [sealed, setSealed] = useState<Credentials | null>(null);
+  const [showStored, setShowStored] = useState(false);
   const [loading, setLoading] = useState(false);
   const [unlockOpen, setUnlockOpen] = useState(false);
   const [pendingReveal, setPendingReveal] = useState<keyof Credentials | null>(null);
@@ -103,6 +106,7 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
 
         // With the vault on, what comes back is still ciphertext — the final
         // decryption happens here, with a key the server has never seen.
+        setSealed(res.credentials);
         if (needsVaultKey(res.credentials)) {
           const key = vaultSession.get();
           if (!key) {
@@ -145,8 +149,15 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
           )
         }
       >
-        <span className="flex items-center gap-2">
+        <span className="flex flex-wrap items-center gap-2">
           <KeyRound className="h-3.5 w-3.5 text-brass-400" /> Credential vault
+          {user?.vault.enabled ? (
+            <Chip tone="emerald">
+              <Lock className="h-2.5 w-2.5" /> Zero-knowledge
+            </Chip>
+          ) : (
+            <Chip tone="amber">Server-readable</Chip>
+          )}
         </span>
       </SectionTitle>
 
@@ -174,11 +185,57 @@ function Vault({ account, onEdit }: { account: AccountDetail; onEdit: () => void
         </div>
       )}
 
+      {/* Proof, not reassurance. Customers were told their logins are
+          unreadable to us and had no way to check — so show them the exact
+          bytes the server holds. It is the only part of the guarantee they can
+          verify with their own eyes. */}
+      {user?.vault.enabled && !empty && (
+        <div className="mt-4 rounded-xl border border-white/[0.07] bg-ink-850/60 p-3.5">
+          <button
+            type="button"
+            onClick={async () => {
+              if (!sealed) {
+                setLoading(true);
+                try {
+                  const res = await api.revealCredentials(account.id);
+                  setSealed(res.credentials);
+                } finally {
+                  setLoading(false);
+                }
+              }
+              setShowStored((v) => !v);
+            }}
+            className="flex w-full items-center gap-2 text-left text-[11px] font-semibold uppercase tracking-[0.14em] text-slate-400 hover:text-slate-200"
+          >
+            <Lock className="h-3 w-3 text-jade-400" />
+            See exactly what this service stores
+            <span className={cx('ml-auto transition-transform', showStored && 'rotate-90')}>›</span>
+          </button>
+
+          {showStored && sealed && (
+            <div className="mt-3 space-y-2">
+              {(['password', 'twoFactor'] as const).map((f) =>
+                sealed[f] ? (
+                  <div key={f}>
+                    <p className="text-[10px] uppercase tracking-wider text-slate-600">{f === 'password' ? 'Password' : '2FA / secret'}</p>
+                    <p className="mt-1 break-all font-mono text-[11px] leading-relaxed text-jade-300/70">{sealed[f]}</p>
+                  </div>
+                ) : null
+              )}
+              <p className="border-t border-white/[0.06] pt-2.5 text-[11px] leading-relaxed text-slate-500">
+                That is the whole record. Your passphrase never left this browser, so nobody running this service — or anyone who
+                steals the database — can turn that back into a password.
+              </p>
+            </div>
+          )}
+        </div>
+      )}
+
       <p className="mt-4 flex items-start gap-1.5 text-[11px] leading-relaxed text-slate-600">
         {loading ? <Loader2 className="mt-0.5 h-3 w-3 shrink-0 animate-spin" /> : <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" />}
         {user?.vault.enabled
           ? 'Encrypted on your device with your vault passphrase. This service stores only ciphertext and cannot read these values.'
-          : 'Sealed with AES-256-GCM. Turn on your private vault in Settings so not even this service can read them.'}
+          : 'Sealed with AES-256-GCM, but decryptable by this server. Turn on your private vault in Settings so not even we can read them.'}
       </p>
 
       <VaultUnlockModal
@@ -426,11 +483,28 @@ function EditModal({
  * server pulls monthly figures on a schedule, so nobody opens AdSense again.
  */
 function ExactRevenuePanel({ account, onChange }: { account: AccountDetail; onChange: (a: AccountDetail) => void }) {
-  const { toast, refresh, user } = useApp();
+  const { toast, refresh, user, exactRevenueAvailable } = useApp();
   const [busy, setBusy] = useState(false);
   const state = account.exactRevenue;
 
   if (user?.isDemo) return null;
+
+  // Offering a button that can only fail is worse than not offering it. Until
+  // the Google OAuth credentials are set, say what is missing instead.
+  if (!exactRevenueAvailable && !state.connected) {
+    return (
+      <Panel className="flex flex-wrap items-center gap-4 p-4">
+        <Wallet className="h-5 w-5 shrink-0 text-slate-600" />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-semibold text-slate-300">Exact earnings — not switched on yet</p>
+          <p className="mt-0.5 text-xs leading-relaxed text-slate-500">
+            Revenue is estimated from this channel's niche until either a payout is logged, or the server is given Google OAuth
+            credentials so real figures can be pulled automatically. See EXACT-REVENUE.md.
+          </p>
+        </div>
+      </Panel>
+    );
+  }
 
   const connect = async () => {
     setBusy(true);
